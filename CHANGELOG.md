@@ -4,7 +4,7 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.0.0/) に基づいています。
 
-## [0.1.0] - 2024-XX-XX
+## [0.1.0] - 2025-11-21
 
 ### 追加
 - DICOMファイルの読み込みと表示機能
