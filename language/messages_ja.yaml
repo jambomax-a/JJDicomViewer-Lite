@@ -1,0 +1,160 @@
+# JJ Dicom Viewer 簡易版 - 日本語メッセージリソース
+# このファイルを編集することで、アプリケーションの日本語表示を変更できます。
+# 将来的には英語版（messages_en.yaml）などを追加して多言語対応も可能です。
+
+app:
+  title: "JJ Dicom Viewer 簡易版"
+  version: "0.1.0"
+  copyright: "Copyright 2024"
+
+menu:
+  file:
+    name: "ファイル(F)"
+    import: "インポート(I)..."
+    exit: "終了(X)"
+  settings:
+    name: "設定(S)"
+    open: "設定..."
+  help:
+    name: "ヘルプ(H)"
+    about: "バージョン情報(A)"
+  separator:
+    version_info: "バージョン情報"
+
+toolbar:
+  import: "インポート"
+  refresh: "更新"
+  delete: "削除"
+
+panel:
+  study_list: "スタディ一覧"
+  series_list: "シリーズ一覧"
+  control: "コントロール"
+  status_ready: "準備完了"
+
+control:
+  slice:
+    label: "スライス:"
+    format: "スライス: {0}/{1}"
+  window_level: "Window Level:"
+  window_width: "Window Width:"
+  reset: "リセット"
+  help: "操作: 左ドラッグ＝パン | Shift+左ドラッグ＝WW/WL | Ctrl+ホイール＝ズーム | ホイール＝スライス移動"
+
+dialog:
+  settings:
+    title: "設定"
+    storage_path: "DICOMファイル保存先:"
+    database_path: "データベースファイル:"
+    language: "言語:"
+    browse: "参照..."
+    save: "保存"
+    cancel: "キャンセル"
+    note: "注意: 保存先を変更すると、次回起動時から新しい場所が使用されます。\n既存のファイルは自動的に移動されません。"
+    saved: "設定を保存しました。\n変更を反映するにはアプリケーションを再起動してください。"
+    saved_title: "設定保存"
+  about:
+    title: "バージョン情報"
+    description: "動物病院向けのDICOM画像ビューア（Swing版）"
+    operations:
+      "0": "・左ドラッグ: パン"
+      "1": "・Shift+左ドラッグ: ウィンドウ/レベル調整"
+      "2": "・Ctrl+ホイール: ズーム"
+      "3": "・ホイール: スライス移動"
+    version_label: "バージョン:"
+
+message:
+  error:
+    title: "エラー"
+    database_init_failed: "データベースの初期化に失敗しました: {0}"
+    dicom_load_failed: "DICOMファイルから画像を読み込めませんでした。"
+    dicom_file_not_found: "DICOMファイルが存在しません: {0}"
+    invalid_image_size: "無効な画像サイズ: {0}x{1}"
+    pixel_data_not_found: "ピクセルデータが見つかりません"
+    invalid_window_level: "ウィンドウ/レベルのパースに失敗: center={0}, width={1}"
+    image_reload_failed: "画像の再読み込み中にエラーが発生しました"
+    instance_load_failed: "インスタンスの読み込み中にエラーが発生しました"
+    dicom_load_failed_details: "DICOMファイルの読み込み中にエラーが発生しました"
+    settings_save_failed: "設定の保存に失敗しました: {0}"
+    storage_dir_create_failed: "ストレージディレクトリを作成できません: {0}"
+    database_dir_create_failed: "データベースディレクトリを作成できません: {0}"
+    storage_path_required: "DICOMファイル保存先を指定してください。"
+    database_path_required: "データベースファイルパスを指定してください。"
+  warning:
+    series_no_instances: "シリーズにインスタンスがありません"
+    instance_null: "Instanceまたはファイルパスがnullです"
+    window_level_invalid: "DICOMファイルのウィンドウ/レベル値が異常です: WC={0}, WW={1}, maxValue={2}"
+    window_level_parse_failed: "ウィンドウ/レベルのパースに失敗: center={0}, width={1}"
+    unsupported_bits: "未対応のビット深度: {0}。16bitとして処理します。"
+    unsupported_color: "16bitカラー画像は未対応。グレースケールとして処理します。"
+    all_pixels_zero: "警告: 画像のピクセル値が全て0です。RAWデータの読み込みに問題がある可能性があります。"
+    image_skipped: "画像をそのままコピーしました（ウィンドウ/レベル処理をスキップ）"
+    messages_file_not_found: "メッセージファイルが見つかりません: {0}。デフォルト（日本語）を使用します。"
+    default_messages_not_found: "デフォルトメッセージファイルも見つかりません: {0}"
+  info:
+    database_initialized: "データベースを初期化しました"
+    study_selected: "スタディが選択されました: {0}"
+    series_selected: "シリーズが選択されました: {0}"
+    instance_loading: "インスタンスを読み込み中: {0}"
+    instance_loaded: "インスタンスの読み込みが完了しました"
+    dicom_file_loading: "DICOMファイルを読み込み中: {0}"
+    dicom_file_loaded: "DICOMファイルの読み込みが完了しました"
+    window_level_loaded: "DICOMファイルからウィンドウ/レベルを読み込みました: WC={0}, WW={1}"
+    default_window_level_setting: "デフォルトウィンドウ/レベルを設定: modality={0}, bitsStored={1}, maxValue={2}"
+    default_window_level_set: "デフォルトウィンドウ/レベルを設定しました: WC={0}, WW={1}"
+    storage_path_changed: "ストレージパスを変更しました: {0}"
+    database_path_changed: "データベースパスを変更しました: {0}"
+    messages_loaded: "メッセージファイルを読み込みました: {0} (言語: {1})"
+  debug:
+    pan_started: "パン開始"
+    window_level_started: "ウィンドウ/レベル調整開始"
+    dicom_load_started: "DICOMファイルを読み込み開始（RAWデータ）: {0}"
+    image_processing: "processImage: 画像を処理中: {0}x{1}"
+    image_processed: "processImage: 画像処理が完了しました (bitsStored={0}, wc={1}, ww={2}, isShortType={3}, rescaleSlope={4}, rescaleIntercept={5}, photometric={6})"
+    pixel_range: "画像のピクセル値の範囲: {0} - {1} (isShortType={2}, sampleCount={3})"
+    rgb_skip: "RGB画像のため、ウィンドウ/レベル処理をスキップ"
+    image_reload: "ウィンドウ/レベルで画像を再読み込み: WC={0}, WW={1}"
+    image_draw: "画像描画: パネルサイズ={0}x{1}, 画像サイズ={2}x{3}, zoomFactor={4}, fitScale={5}"
+    initial_display: "初期表示: effectiveZoom={0}, scaledSize={1}x{2}"
+    zoom_in: "ズームイン: scaledSize={0}x{1}"
+
+viewer:
+  no_file: "DICOMファイルを開いてください"
+  overlay_format: "WL: {0} / WW: {1}"
+
+import:
+  dialog_title: "DICOMフォルダを選択"
+  progress: "インポート中..."
+  completed: "インポート完了"
+
+status:
+  studies_loaded: "{0}件のスタディを読み込みました"
+  study_selected: "スタディ: {0} ({1}シリーズ) - シリーズを選択してください"
+  study_not_selected: "スタディが選択されていません"
+  series_selected: "シリーズ: {0} ({1}枚)"
+  study_list_load_failed: "スタディリストの読み込みに失敗しました: {0}"
+  series_list_load_failed: "シリーズリストの読み込みに失敗しました: {0}"
+  study_list_update_failed: "スタディリストの更新に失敗しました"
+
+series:
+  description_format: "{0} - {1} ({2}枚)"
+
+language:
+  japanese: "日本語"
+  english: "English"
+
+delete:
+  no_study_selected: "削除するスタディを選択してください。"
+  confirm_title: "削除確認"
+  confirm_message: "スタディを削除しますか？\n\n患者名: {0}\nStudy UID: {1}"
+  method_title: "削除方法の選択"
+  method_message: "削除方法を選択してください。\n\nはい: データベースとDCMファイルの両方を削除\nいいえ: データベースのみ削除（DCMファイルは残す）\nキャンセル: 削除を中止"
+  button:
+    yes: "はい"
+    no: "いいえ"
+    cancel: "キャンセル"
+  completed_both: "スタディを削除しました\nデータベースとDCMファイル: {0}件削除"
+  completed_db_only: "スタディをデータベースから削除しました（DCMファイルは残しています）"
+  failed_files: "\n（{0}件のファイル削除に失敗しました）"
+  error: "スタディの削除に失敗しました:\n{0}"
+

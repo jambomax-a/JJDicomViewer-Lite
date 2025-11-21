@@ -1,0 +1,422 @@
+name: Build Installers
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    # Windowsインストーラのビルドはオプショナル（失敗しても他のビルドは続行）
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Verify source files are checked out
+        run: |
+          Write-Host "=== Checking if source files are checked out ===" -ForegroundColor Cyan
+          if (Test-Path "src\main\java") {
+            Write-Host "Source directory exists: src\main\java" -ForegroundColor Green
+            $javaFiles = Get-ChildItem -Path "src\main\java" -Recurse -Filter "*.java" | Measure-Object
+            Write-Host "Found $($javaFiles.Count) Java source files" -ForegroundColor Green
+            if ($javaFiles.Count -eq 0) {
+              Write-Host "WARNING: No Java files found in src\main\java" -ForegroundColor Yellow
+            }
+          } else {
+            Write-Host "ERROR: Source directory does not exist: src\main\java" -ForegroundColor Red
+            Write-Host "Listing root directory:" -ForegroundColor Yellow
+            Get-ChildItem -Path "." | Select-Object Name, FullName | Format-Table -AutoSize
+            exit 1
+          }
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: '9.0.0'
+      
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 9.0.0
+      
+      - name: Install WiX Toolset
+        run: |
+          Write-Host "=== Checking if WiX Toolset is already installed ===" -ForegroundColor Cyan
+          $wixPaths = @(
+            "C:\Program Files (x86)\WiX Toolset v3.14\bin",
+            "C:\Program Files (x86)\WiX Toolset v3.11\bin",
+            "C:\Program Files\WiX Toolset v3.14\bin",
+            "C:\Program Files\WiX Toolset v3.11\bin"
+          )
+          $wixFound = $false
+          foreach ($path in $wixPaths) {
+            if (Test-Path $path) {
+              Write-Host "WiX Toolset found at: $path" -ForegroundColor Green
+              echo "WIX_HOME=$path" >> $env:GITHUB_ENV
+              echo "$path" >> $env:GITHUB_PATH
+              $wixFound = $true
+              break
+            }
+          }
+          
+          if (-not $wixFound) {
+            Write-Host "WiX Toolset not found, attempting to install via Chocolatey..." -ForegroundColor Yellow
+            # Chocolateyパッケージ名を試す（wixtoolset または wix）
+            choco install wixtoolset --yes --ignore-checksums 2>&1 | Tee-Object -Variable chocoOutput
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "wixtoolset package not found, trying wix..." -ForegroundColor Yellow
+              choco install wix --yes --ignore-checksums 2>&1 | Tee-Object -Variable chocoOutput
+            }
+            
+            # インストール後、再度標準パスを確認
+            foreach ($path in $wixPaths) {
+              if (Test-Path $path) {
+                Write-Host "WiX Toolset installed at: $path" -ForegroundColor Green
+                echo "WIX_HOME=$path" >> $env:GITHUB_ENV
+                echo "$path" >> $env:GITHUB_PATH
+                $wixFound = $true
+                break
+              }
+            }
+            
+            if (-not $wixFound) {
+              Write-Host "WARNING: WiX Toolset installation may have failed, but will continue anyway" -ForegroundColor Yellow
+              Write-Host "jpackage will attempt to use MSI format if WiX is available in PATH" -ForegroundColor Yellow
+            }
+          }
+        continue-on-error: true
+      
+      - name: Clean and Build with Gradle
+        run: .\gradlew.bat clean build --no-daemon
+      
+      - name: Verify JAR file (Fat JAR check)
+        run: |
+          Write-Host "=== Starting JAR file verification ===" -ForegroundColor Cyan
+          
+          Write-Host "Checking JAR file size..." -ForegroundColor Yellow
+          $jarFile = Get-Item "build\libs\JJDicomViewer-Lite-0.1.0.jar"
+          $sizeMB = [math]::Round($jarFile.Length / 1MB, 2)
+          Write-Host "JAR file size: $sizeMB MB" -ForegroundColor Green
+          if ($sizeMB -lt 10) {
+            Write-Host "ERROR: JAR file is too small. Fat JAR might not be created correctly." -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "Fat JAR check passed." -ForegroundColor Green
+          
+          Write-Host "Checking if main class exists in JAR..." -ForegroundColor Yellow
+          $jarContent = & "$env:JAVA_HOME\bin\jar.exe" tf $jarFile.FullName 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Failed to read JAR contents!" -ForegroundColor Red
+            Write-Host $jarContent
+            exit 1
+          }
+          if ($jarContent -match "com/jjdicomviewer/app/JJDicomViewerApp\.class") {
+            Write-Host "✓ Main class found in JAR: com/jjdicomviewer/app/JJDicomViewerApp.class" -ForegroundColor Green
+          } else {
+            Write-Host "ERROR: Main class not found in JAR!" -ForegroundColor Red
+            Write-Host "First 50 lines of JAR contents:" -ForegroundColor Yellow
+            $jarContent | Select-Object -First 50
+            exit 1
+          }
+          
+          Write-Host "Checking manifest Main-Class attribute..." -ForegroundColor Yellow
+          $tempDir = New-TemporaryFile | ForEach-Object { Remove-Item $_; New-Item -ItemType Directory -Path $_ }
+          # jarコマンドは-Cオプションの位置が重要。ファイルを指定してから-Cを指定する必要がある
+          Push-Location $tempDir
+          try {
+            $extractResult = & "$env:JAVA_HOME\bin\jar.exe" xf $jarFile.FullName META-INF/MANIFEST.MF 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "ERROR: Failed to extract manifest from JAR!" -ForegroundColor Red
+              Write-Host "jar.exe exit code: $LASTEXITCODE" -ForegroundColor Yellow
+              Write-Host "Error output: $extractResult" -ForegroundColor Yellow
+              exit 1
+            }
+          } finally {
+            Pop-Location
+          }
+          if (Test-Path "$tempDir\META-INF\MANIFEST.MF") {
+            $manifest = Get-Content "$tempDir\META-INF\MANIFEST.MF" -Raw
+            if ($manifest -match "Main-Class:\s*com\.jjdicomviewer\.app\.JJDicomViewerApp") {
+              Write-Host "✓ Main-Class attribute found in manifest: OK" -ForegroundColor Green
+              Write-Host "Manifest Main-Class: $($matches[0])" -ForegroundColor Cyan
+            } else {
+              Write-Host "ERROR: Main-Class attribute not found in manifest!" -ForegroundColor Red
+              Write-Host "Manifest content:" -ForegroundColor Yellow
+              Write-Host $manifest
+              exit 1
+            }
+          } else {
+            Write-Host "ERROR: Could not extract manifest from JAR!" -ForegroundColor Red
+            exit 1
+          }
+          Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+          
+          Write-Host "=== JAR file verification completed successfully ===" -ForegroundColor Green
+      
+      - name: Create Windows Installer (MSI)
+        run: .\gradlew.bat createWindowsInstaller --no-daemon
+      
+      - name: Verify Installer Contents
+        run: |
+          Write-Host "=== Verifying installer contents ===" -ForegroundColor Cyan
+          
+          if (Test-Path "build\installer") {
+            Write-Host "Installer directory found" -ForegroundColor Green
+            Get-ChildItem "build\installer" -Recurse | Format-Table Name, Length, FullName
+            
+            $msiFile = Get-Item "build\installer\*.msi" -ErrorAction SilentlyContinue
+            if ($msiFile) {
+              $sizeMB = [math]::Round($msiFile.Length / 1MB, 2)
+              Write-Host "MSI file size: $sizeMB MB" -ForegroundColor Green
+              Write-Host "MSI file: $($msiFile.FullName)" -ForegroundColor Cyan
+            } else {
+              Write-Host "ERROR: MSI file not found!" -ForegroundColor Red
+              exit 1
+            }
+          } else {
+            Write-Host "ERROR: build\installer directory not found!" -ForegroundColor Red
+            exit 1
+          }
+          
+          Write-Host "=== Installer verification completed ===" -ForegroundColor Green
+      
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: build/installer/*.msi
+          if-no-files-found: ignore
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: '9.0.0'
+      
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 9.0.0
+      
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      
+      - name: Build with Gradle
+        run: ./gradlew build --no-daemon
+      
+      - name: Check jpackage availability
+        run: |
+          echo "Checking jpackage..."
+          jpackage --version || echo "jpackage not found"
+          which jpackage || echo "jpackage not in PATH"
+          java -version
+      
+      - name: Create macOS Installer
+        run: |
+          echo "=== Starting macOS installer build ==="
+          echo "JAR file check:"
+          ls -lh build/libs/*.jar || echo "No JAR files found"
+          echo "Running jpackage directly for testing:"
+          jpackage --version || echo "jpackage not found"
+          echo "=== Trying direct jpackage command first ==="
+          JAR_FILE=$(ls build/libs/*.jar | head -1)
+          echo "JAR file: $JAR_FILE"
+          echo "JAR basename: $(basename "$JAR_FILE")"
+          
+          # 直接jpackageを実行してエラーを確認
+          # コード署名なしでビルド（GitHub Actionsでは署名証明書がないため）
+          # macOSのapp-versionは最初の数字が1以上である必要があるため、0.1.0の場合は1.0.0に変換
+          echo "=== Executing jpackage command ==="
+          if jpackage \
+            --input build/libs \
+            --name JJDicomViewer-Lite \
+            --main-jar $(basename "$JAR_FILE") \
+            --main-class com.jjdicomviewer.app.JJDicomViewerApp \
+            --type dmg \
+            --dest build/installer \
+            --app-version 1.0.0 \
+            --description "JJ Dicom Viewer 簡易版" \
+            --vendor JJDicomViewer \
+            --copyright "Copyright 2024" \
+            --mac-package-identifier com.jjdicomviewer.lite \
+            --mac-package-name JJDicomViewer-Lite \
+            --java-options "-Xmx2048m" 2>&1 | tee jpackage-output.log; then
+            echo "=== jpackage succeeded ==="
+            echo "=== Checking for DMG file ==="
+            ls -lh build/installer/*.dmg || echo "DMG file not found"
+          else
+            EXIT_CODE=$?
+            echo "=== Direct jpackage failed with exit code: $EXIT_CODE ==="
+            echo "=== Full jpackage error output ==="
+            cat jpackage-output.log || echo "Log file not found"
+            echo "=== Trying Gradle task as fallback ==="
+            if ./gradlew createMacOSInstaller --no-daemon --stacktrace 2>&1 | tee build-installer.log; then
+              echo "=== Gradle task succeeded ==="
+              echo "=== Checking for DMG file ==="
+              ls -lh build/installer/*.dmg || echo "DMG file not found"
+            else
+              GRADLE_EXIT=$?
+              echo "=== Gradle task also failed with exit code: $GRADLE_EXIT ==="
+              echo "=== First 500 lines of Gradle log ==="
+              head -500 build-installer.log || echo "Log file not found"
+              echo "=== Last 200 lines of Gradle log ==="
+              tail -200 build-installer.log || echo "Log file not found"
+              exit $GRADLE_EXIT
+            fi
+          fi
+        continue-on-error: true
+      
+      - name: Show installer build log
+        if: always()
+        run: |
+          echo "=== Full installer build log ==="
+          if [ -f jpackage-output.log ]; then
+            echo "=== jpackage-output.log (First 500 lines) ==="
+            head -500 jpackage-output.log
+            echo "=== jpackage-output.log (Last 200 lines) ==="
+            tail -200 jpackage-output.log
+          fi
+          if [ -f build-installer.log ]; then
+            echo "=== build-installer.log (First 500 lines) ==="
+            head -500 build-installer.log
+            echo "=== build-installer.log (Last 500 lines) ==="
+            tail -500 build-installer.log
+          fi
+          if [ ! -f jpackage-output.log ] && [ ! -f build-installer.log ]; then
+            echo "No log files found"
+            echo "=== Checking for any error files ==="
+            find . -name "*.log" -o -name "*error*" 2>/dev/null | head -20
+          fi
+      
+      - name: Check installer files
+        run: |
+          echo "Checking for installer files..."
+          ls -la build/installer/ || echo "No installer directory found"
+          find build -name "*.dmg" -o -name "*.pkg" || echo "No DMG or PKG files found"
+      
+      - name: Upload macOS Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installer
+          path: build/installer/
+          if-no-files-found: ignore
+        continue-on-error: true
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: '9.0.0'
+      
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 9.0.0
+      
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      
+      - name: Build with Gradle
+        run: ./gradlew build --no-daemon
+      
+      - name: Create Linux Installer
+        run: ./gradlew createLinuxInstaller --no-daemon
+      
+      - name: Upload Linux Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-installer
+          path: build/installer/*.deb
+
+  release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    # 一部のジョブが失敗しても続行（Windowsが失敗してもmacOS/Linux版はリリース）
+    # build-windowsはcontinue-on-error: trueなので、失敗してもreleaseは実行される
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 全履歴を取得（git archiveに必要）
+      
+      - name: Create source code archives
+        run: |
+          echo "Creating source code archives..."
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          git archive --format=zip --output=source-code.zip HEAD
+          git archive --format=tar.gz --output=source-code.tar.gz HEAD
+          echo "Source code archives created:"
+          ls -lh source-code.*
+      
+      - name: Prepare release notes from README
+        run: |
+          # README.mdの内容をRelease Notesとして使用
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
+          echo "RELEASE_TITLE=${TAG_NAME}" >> $GITHUB_ENV
+          cat README.md > release-notes.md
+          echo "Release notes prepared from README.md"
+      
+      - name: Download macOS Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-installer
+          path: artifacts/macos
+          if-no-files-found: ignore
+      
+      - name: Download Linux Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-installer
+          path: artifacts/linux
+          if-no-files-found: ignore
+      
+      - name: Download Windows Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: artifacts/windows
+          if-no-files-found: ignore
+      
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: |
+            artifacts/windows/*
+            artifacts/macos/*
+            artifacts/linux/*
+            source-code.zip
+            source-code.tar.gz
+          # 全プラットフォーム（Windows/macOS/Linux）のインストーラとソースコードアーカイブをアップロード
+          # Windowsビルドが失敗した場合でも、macOS/Linux版はアップロードされる
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- ログファイルの保存先 -->
+    <property name="LOG_DIR" value="${user.home}/.jjdicomviewerlite/logs"/>
+    <property name="LOG_FILE" value="${LOG_DIR}/jjdicomviewer.log"/>
+    
+    <!-- コンソール出力（開発環境用） -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- ファイル出力（本番環境用） -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_FILE}</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- ログファイルのローテーション（日次） -->
+            <fileNamePattern>${LOG_DIR}/jjdicomviewer.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <!-- 最大30日分のログを保持 -->
+            <maxHistory>30</maxHistory>
+            <!-- 合計サイズ制限（100MB） -->
+            <totalSizeCap>100MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- ルートロガー設定 -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+    
+    <!-- アプリケーション固有のロガー設定 -->
+    <logger name="com.jjdicomviewer" level="INFO"/>
+    
+    <!-- 詳細なデバッグが必要な場合は、以下のコメントを外してDEBUGレベルに変更 -->
+    <!-- <logger name="com.jjdicomviewer" level="DEBUG"/> -->
+</configuration>
+

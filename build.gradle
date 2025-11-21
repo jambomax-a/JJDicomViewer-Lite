@@ -1,0 +1,411 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.jjdicomviewer'
+version = '0.1.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+    // dcm4che用のリポジトリ
+    maven {
+        url = uri("https://www.dcm4che.org/maven2/")
+    }
+}
+
+dependencies {
+    // DICOM processing
+    implementation 'org.dcm4che:dcm4che-core:5.31.0'
+    implementation 'org.dcm4che:dcm4che-image:5.31.0'
+    implementation 'org.dcm4che:dcm4che-imageio:5.31.0'
+    implementation 'org.dcm4che:dcm4che-net:5.31.0'
+    
+    // SQLite
+    implementation 'org.xerial:sqlite-jdbc:3.43.2.2'
+    
+    // Logging
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'ch.qos.logback:logback-classic:1.4.11'
+    
+    // Configuration
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.15.2'
+    
+    // Testing
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    mainClass = 'com.jjdicomviewer.app.JJDicomViewerApp'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+// JARファイルにMain-Class属性を追加
+// 重要: Fat JARを作成（依存関係を含む）ことで、jpackageが作成するインストーラーに
+// すべての依存関係（SLF4J、dcm4che、Jackson等）が含まれる
+// この設定がないと、「Failed to launch JVM」エラーが発生する
+jar {
+    // applicationプラグインのjarタスクを確実に上書き
+    archiveClassifier = ''
+    enabled = true
+    
+    // compileJavaとclassesタスクが実行されることを保証（clean後のビルドで重要）
+    // compileJavaを明示的に依存させることで、ソースファイルが存在する場合に確実にコンパイルされる
+    dependsOn compileJava, classes
+    
+    manifest {
+        attributes(
+            'Main-Class': 'com.jjdicomviewer.app.JJDicomViewerApp'
+        )
+    }
+    
+    // まず自分のクラスファイルを含める（明示的に先に追加することで、依存関係に含まれる同名クラスで上書きされないようにする）
+    // sourceSets.main.outputは build/classes/java/main を指す
+    from sourceSets.main.output
+    
+    // その後、すべてのランタイム依存関係を含める
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    // 重複する場合は最初に追加されたもの（自分のクラスファイル）を優先する
+    // WARNにすることで、重複が発生した場合に警告を表示できる
+    duplicatesStrategy = DuplicatesStrategy.WARN
+    
+    // ビルド前に自分のクラスファイルが存在することを確認
+    doFirst {
+        def outputDir = sourceSets.main.output.classesDirs.getFiles().first()
+        def sourceDir = sourceSets.main.java.srcDirs.first()
+        println "Source directory: ${sourceDir} (exists: ${sourceDir.exists()})"
+        println "Output directory: ${outputDir} (exists: ${outputDir.exists()})"
+        
+        // ソースディレクトリが存在しない場合は、チェックアウトの問題を疑う
+        if (!sourceDir.exists()) {
+            throw new GradleException("Source directory does not exist: ${sourceDir}. This indicates that source files are not checked out. Please verify that:\n1. Source files are committed to the repository\n2. GitHub Actions checkout step is working correctly\n3. .gitignore is not excluding source files")
+        }
+        
+        // クラスディレクトリの存在確認（コンパイル済みのクラスファイル）
+        if (!outputDir.exists() || !outputDir.isDirectory()) {
+            def errorMsg = "Classes directory does not exist: ${outputDir}.\n"
+            errorMsg += "This usually means that 'compileJava' task did not compile the source files.\n"
+            errorMsg += "Source directory exists: ${sourceDir.exists()}\n"
+            if (sourceDir.exists()) {
+                def sourceFiles = sourceDir.listFiles()?.findAll { it.name.endsWith('.java') || it.isDirectory() } ?: []
+                errorMsg += "Source directory contains ${sourceFiles.size()} items.\n"
+            }
+            errorMsg += "Make sure 'compileJava' task is executed before 'jar' task."
+            throw new GradleException(errorMsg)
+        }
+        
+        // クラスファイルが存在するか確認（再帰的に検索）
+        def classFiles = []
+        def findClassFiles
+        findClassFiles = { File dir ->
+            if (dir.exists() && dir.isDirectory()) {
+                dir.listFiles()?.each { file ->
+                    if (file.isFile() && file.name.endsWith('.class')) {
+                        classFiles.add(file)
+                    } else if (file.isDirectory()) {
+                        findClassFiles.call(file)
+                    }
+                }
+            }
+        }
+        findClassFiles.call(outputDir)
+        if (classFiles.isEmpty()) {
+            def errorMsg = "Classes directory is empty: ${outputDir}. No class files found."
+            if (!sourceDir.exists()) {
+                errorMsg += " Source directory does not exist: ${sourceDir}. Make sure source files are checked out."
+            } else {
+                errorMsg += " Make sure 'compileJava' task compiles the source files."
+            }
+            throw new GradleException(errorMsg)
+        }
+        
+        println "Including classes from: ${outputDir} (${classFiles.size()} class files found)"
+    }
+    
+    // ビルド後にJARファイルのサイズを確認（デバッグ用）
+    doLast {
+        def jarFile = archiveFile.get().asFile
+        def sizeMB = jarFile.length() / (1024 * 1024)
+        println "Created JAR file: ${jarFile.name}, Size: ${String.format("%.2f", sizeMB)} MB"
+        if (sizeMB < 10) {
+            throw new GradleException("JAR file is too small (${String.format("%.2f", sizeMB)} MB). Fat JAR might not be created correctly.")
+        }
+        
+        // JARファイルにメインクラスが含まれていることを確認
+        def jarContent = new java.util.zip.ZipFile(jarFile).entries().collect { it.name }
+        def mainClassPath = "com/jjdicomviewer/app/JJDicomViewerApp.class"
+        if (!jarContent.contains(mainClassPath)) {
+            throw new GradleException("Main class not found in JAR: ${mainClassPath}. JAR contains ${jarContent.size()} entries, but missing main class.")
+        }
+        println "Main class verified in JAR: ${mainClassPath}"
+    }
+}
+
+// 言語ファイルをbuild/resources/languageにコピー（インストール用）
+task copyLanguageFiles(type: Copy) {
+    from 'src/main/resources/i18n'
+    into 'build/resources/language'
+    include 'messages_*.yaml'
+    rename { String fileName ->
+        // i18nフォルダのファイルをlanguageフォルダにコピー
+        fileName
+    }
+}
+
+// buildタスクの前に言語ファイルをコピー
+build.dependsOn copyLanguageFiles
+
+// Javaランタイムイメージを作成するタスク（jlinkを使用）
+task createRuntimeImage(type: Exec) {
+    dependsOn build
+    
+    def runtimeImageDir = file('build/runtime-image')
+    def javaHome = System.getProperty('java.home')
+    
+    // プラットフォームに応じてjlinkコマンドを決定
+    def jlinkCommand
+    def os = System.getProperty('os.name').toLowerCase()
+    if (os.contains('win')) {
+        def jlinkPath = file("${javaHome}/bin/jlink.exe")
+        jlinkCommand = jlinkPath.exists() ? jlinkPath.absolutePath : 'jlink'
+    } else {
+        def jlinkPath = file("${javaHome}/bin/jlink")
+        jlinkCommand = jlinkPath.exists() ? jlinkPath.absolutePath : 'jlink'
+    }
+    
+    doFirst {
+        // 既存のランタイムイメージディレクトリを削除（存在する場合）
+        if (runtimeImageDir.exists()) {
+            println "Deleting existing runtime image directory: ${runtimeImageDir.absolutePath}"
+            delete runtimeImageDir
+            // 削除が完了するまで少し待つ
+            Thread.sleep(500)
+        }
+        println "Creating runtime image directory: ${runtimeImageDir.absolutePath}"
+    }
+    
+    // 必要なモジュールを明示的に追加
+    // Swingアプリケーションに必要な主要なモジュールを含める
+    // モジュール化されていないJARファイル（dcm4che、Jackson等）を使用する場合、多くのモジュールが必要
+    def modules = [
+        'java.base',
+        'java.desktop',          // Swing/AWT
+        'java.sql',              // SQLite JDBC
+        'java.xml',              // XML処理
+        'java.logging',          // SLF4J/Logback
+        'java.management',       // 管理API
+        'java.naming',           // JNDI
+        'java.prefs',            // Preferences API
+        'java.security.jgss',    // セキュリティ
+        'java.security.sasl',    // SASL認証
+        'jdk.unsupported',       // ネイティブライブラリ（dcm4che等）
+        'jdk.zipfs',             // ZIPファイルシステム
+        'jdk.crypto.ec',         // 暗号化（EC）
+        'jdk.crypto.cryptoki',   // PKCS#11
+        'jdk.jartool'            // jar ツール（一部のライブラリで必要）
+    ].join(',')
+    
+    commandLine jlinkCommand,
+        '--module-path', "${javaHome}/jmods",
+        '--add-modules', modules,
+        '--strip-debug',
+        '--no-man-pages',
+        '--no-header-files',
+        '--compress=2',
+        '--output', runtimeImageDir.absolutePath
+}
+
+// jpackage用の設定（Windows用）
+task createWindowsInstaller(type: Exec) {
+    // jarタスクとランタイムイメージ作成タスクを明示的に依存させて、fat JARとランタイムイメージが確実に作成されるようにする
+    dependsOn jar, build, copyLanguageFiles, createRuntimeImage
+    doFirst {
+        mkdir 'build/installer'
+        
+        // 使用するJARファイルの存在確認（実行フェーズで確認）
+        def mainJarFile = file("build/libs/JJDicomViewer-Lite-${version}.jar")
+        if (!mainJarFile.exists()) {
+            throw new GradleException("Main JAR file not found: ${mainJarFile.absolutePath}. Make sure 'jar' task is executed before this task.")
+        }
+        def jarSizeMB = mainJarFile.length() / (1024 * 1024)
+        println "Using JAR file: ${mainJarFile.name}, Size: ${String.format("%.2f", jarSizeMB)} MB"
+        if (jarSizeMB < 10) {
+            throw new GradleException("JAR file is too small (${String.format("%.2f", jarSizeMB)} MB). Fat JAR might not be created correctly.")
+        }
+        
+        // ランタイムイメージの存在確認
+        def runtimeImageDir = file('build/runtime-image')
+        if (!runtimeImageDir.exists()) {
+            throw new GradleException("Runtime image not found: ${runtimeImageDir.absolutePath}. Make sure 'createRuntimeImage' task is executed before this task.")
+        }
+        def javaExe = file("${runtimeImageDir}/bin/java.exe")
+        if (!javaExe.exists()) {
+            throw new GradleException("java.exe not found in runtime image: ${javaExe.absolutePath}")
+        }
+        println "Using runtime image: ${runtimeImageDir.absolutePath}"
+    }
+    // WiX Toolsetの検出（jpackageは自動検出するが、明示的に確認）
+    def wixHome = System.getenv('WIX_HOME')
+    def installerType = 'msi' // MSI形式を優先
+    def iconFile = file('src/main/resources/icons/app-icon.ico')
+    def languageDir = file('build/resources/language')
+    
+    // WiX Toolsetの標準インストールパスを確認
+    def wixFound = false
+    if (wixHome != null && new File(wixHome, 'bin').exists()) {
+        wixFound = true
+        println "WiX Toolset found via WIX_HOME: $wixHome"
+    } else {
+        // 標準的なインストールパスを確認
+        def standardPaths = [
+            'C:\\Program Files (x86)\\WiX Toolset v3.11\\bin',
+            'C:\\Program Files (x86)\\WiX Toolset v3.14\\bin',
+            'C:\\Program Files (x86)\\WiX Toolset v3.15\\bin',
+            'C:\\Program Files\\WiX Toolset v3.11\\bin',
+            'C:\\Program Files\\WiX Toolset v3.14\\bin',
+            'C:\\Program Files\\WiX Toolset v3.15\\bin'
+        ]
+        for (def path : standardPaths) {
+            if (new File(path).exists()) {
+                wixFound = true
+                println "WiX Toolset found at standard location: $path"
+                break
+            }
+        }
+    }
+    
+    if (!wixFound) {
+        println "WARNING: WiX Toolset not found. jpackage will attempt to use MSI format anyway."
+        println "If MSI creation fails, install WiX Toolset from: https://wixtoolset.org/"
+        println "Or set WIX_HOME environment variable to WiX Toolset bin directory."
+    }
+    
+    // 明示的に作成したランタイムイメージを使用する
+    // 重要: --runtime-imageを指定することで、確実にランタイムイメージがインストーラーに含まれる
+    // モジュール化されていないJARファイル（dcm4che、Jackson等）を使用する場合、
+    // --java-optionsで--add-modules=ALL-MODULE-PATHを追加して
+    // すべてのモジュールパスからモジュールを読み込めるようにする
+    def runtimeImageDir = file('build/runtime-image')
+    def cmdLine = ['jpackage',
+        '--input', 'build/libs',
+        '--name', 'JJDicomViewer-Lite',
+        '--main-jar', "JJDicomViewer-Lite-${version}.jar",
+        '--main-class', 'com.jjdicomviewer.app.JJDicomViewerApp',
+        '--runtime-image', runtimeImageDir.absolutePath,
+        '--type', installerType,
+        '--dest', 'build/installer',
+        '--app-version', version,
+        '--description', 'JJ Dicom Viewer 簡易版',
+        '--vendor', 'JJDicomViewer',
+        '--copyright', 'Copyright 2024',
+        '--win-menu',
+        '--win-shortcut',
+        '--java-options', '-Xmx2048m',
+        '--java-options', '--add-modules=ALL-MODULE-PATH']
+    // アイコンファイルが存在する場合のみ追加
+    if (iconFile.exists()) {
+        cmdLine.addAll(['--icon', iconFile.absolutePath])
+    }
+    // 言語ファイルディレクトリが存在する場合、リソースとして追加
+    if (languageDir.exists() && languageDir.listFiles() != null && languageDir.listFiles().length > 0) {
+        cmdLine.addAll(['--resource-dir', languageDir.absolutePath])
+    }
+    commandLine cmdLine
+    // MSI作成に失敗した場合のエラーハンドリングはjpackageが行う
+    ignoreExitValue = false // MSI作成が失敗した場合はエラーを出す
+}
+
+// jpackage用の設定（macOS用）
+task createMacOSInstaller(type: Exec) {
+    // jarタスクとランタイムイメージ作成タスクを明示的に依存させて、fat JARとランタイムイメージが確実に作成されるようにする
+    dependsOn jar, build, copyLanguageFiles, createRuntimeImage
+    doFirst {
+        mkdir 'build/installer'
+    }
+    // macOSのapp-versionは最初の数字が1以上である必要があるため、0.1.0の場合は1.0.0に変換
+    def macAppVersion = version.startsWith('0.') ? version.replaceFirst('0\\.', '1.') : version
+    def iconFile = file('src/main/resources/icons/app-icon.icns')
+    def languageDir = file('build/resources/language')
+    // 明示的に作成したランタイムイメージを使用する
+    def runtimeImageDir = file('build/runtime-image')
+    def cmdLine = ['jpackage',
+        '--input', 'build/libs',
+        '--name', 'JJDicomViewer-Lite',
+        '--main-jar', "JJDicomViewer-Lite-${version}.jar",
+        '--main-class', 'com.jjdicomviewer.app.JJDicomViewerApp',
+        '--runtime-image', runtimeImageDir.absolutePath,
+        '--type', 'dmg',
+        '--dest', 'build/installer',
+        '--app-version', macAppVersion,
+        '--description', 'JJ Dicom Viewer 簡易版',
+        '--vendor', 'JJDicomViewer',
+        '--copyright', 'Copyright 2024',
+        '--mac-package-identifier', 'com.jjdicomviewer.lite',
+        '--mac-package-name', 'JJDicomViewer-Lite',
+        '--java-options', '-Xmx2048m',
+        '--java-options', '--add-modules=ALL-MODULE-PATH']
+    // アイコンファイルが存在する場合のみ追加
+    if (iconFile.exists()) {
+        cmdLine.addAll(['--icon', iconFile.absolutePath])
+    }
+    // 言語ファイルディレクトリが存在する場合、リソースとして追加
+    if (languageDir.exists() && languageDir.listFiles() != null && languageDir.listFiles().length > 0) {
+        cmdLine.addAll(['--resource-dir', languageDir.absolutePath])
+    }
+    commandLine cmdLine
+}
+
+// jpackage用の設定（Linux用）
+task createLinuxInstaller(type: Exec) {
+    // jarタスクとランタイムイメージ作成タスクを明示的に依存させて、fat JARとランタイムイメージが確実に作成されるようにする
+    dependsOn jar, build, copyLanguageFiles, createRuntimeImage
+    doFirst {
+        mkdir 'build/installer'
+    }
+    def iconFile = file('src/main/resources/icons/app-icon.png')
+    def languageDir = file('build/resources/language')
+    // 明示的に作成したランタイムイメージを使用する
+    def runtimeImageDir = file('build/runtime-image')
+    def cmdLine = ['jpackage',
+        '--input', 'build/libs',
+        '--name', 'JJDicomViewer-Lite',
+        '--main-jar', "JJDicomViewer-Lite-${version}.jar",
+        '--main-class', 'com.jjdicomviewer.app.JJDicomViewerApp',
+        '--runtime-image', runtimeImageDir.absolutePath,
+        '--type', 'deb',
+        '--dest', 'build/installer',
+        '--app-version', version,
+        '--description', 'JJ Dicom Viewer 簡易版',
+        '--vendor', 'JJDicomViewer',
+        '--copyright', 'Copyright 2024',
+        '--java-options', '-Xmx2048m',
+        '--java-options', '--add-modules=ALL-MODULE-PATH']
+    // アイコンファイルが存在する場合のみ追加
+    if (iconFile.exists()) {
+        cmdLine.addAll(['--icon', iconFile.absolutePath])
+    }
+    // 言語ファイルディレクトリが存在する場合、リソースとして追加
+    if (languageDir.exists() && languageDir.listFiles() != null && languageDir.listFiles().length > 0) {
+        cmdLine.addAll(['--resource-dir', languageDir.absolutePath])
+    }
+    commandLine cmdLine
+}
+

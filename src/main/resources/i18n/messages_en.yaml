@@ -1,0 +1,159 @@
+# JJ Dicom Viewer Lite - English Message Resources
+# Edit this file to change the application's English display.
+
+app:
+  title: "JJ Dicom Viewer Lite"
+  version: "0.1.0"
+  copyright: "Copyright 2024"
+
+menu:
+  file:
+    name: "File(F)"
+    import: "Import(I)..."
+    exit: "Exit(X)"
+  settings:
+    name: "Settings(S)"
+    open: "Settings..."
+  help:
+    name: "Help(H)"
+    about: "About(A)"
+  separator:
+    version_info: "Version Info"
+
+toolbar:
+  import: "Import"
+  refresh: "Refresh"
+  delete: "Delete"
+
+panel:
+  study_list: "Study List"
+  series_list: "Series List"
+  control: "Control"
+  status_ready: "Ready"
+
+control:
+  slice:
+    label: "Slice:"
+    format: "Slice: {0}/{1}"
+  window_level: "Window Level:"
+  window_width: "Window Width:"
+  reset: "Reset"
+  help: "Operations: Left Drag=Pan | Shift+Left Drag=WW/WL | Ctrl+Wheel=Zoom | Wheel=Slice Navigation"
+
+dialog:
+  settings:
+    title: "Settings"
+    storage_path: "DICOM File Storage:"
+    database_path: "Database File:"
+    language: "Language:"
+    browse: "Browse..."
+    save: "Save"
+    cancel: "Cancel"
+    note: "Note: When you change the storage location, the new location will be used from the next startup.\nExisting files will not be moved automatically."
+    saved: "Settings saved.\nPlease restart the application for changes to take effect."
+    saved_title: "Settings Saved"
+  about:
+    title: "About"
+    description: "DICOM Image Viewer for Veterinary Hospitals (Swing Version)"
+    operations:
+      "0": "・Left Drag: Pan"
+      "1": "・Shift+Left Drag: Window/Level Adjustment"
+      "2": "・Ctrl+Wheel: Zoom"
+      "3": "・Wheel: Slice Navigation"
+    version_label: "Version:"
+
+message:
+  error:
+    title: "Error"
+    database_init_failed: "Database initialization failed: {0}"
+    dicom_load_failed: "Could not load image from DICOM file."
+    dicom_file_not_found: "DICOM file does not exist: {0}"
+    invalid_image_size: "Invalid image size: {0}x{1}"
+    pixel_data_not_found: "Pixel data not found"
+    invalid_window_level: "Window/Level parsing failed: center={0}, width={1}"
+    image_reload_failed: "Error occurred while reloading image"
+    instance_load_failed: "Error occurred while loading instance"
+    dicom_load_failed_details: "Error occurred while loading DICOM file"
+    settings_save_failed: "Failed to save settings: {0}"
+    storage_dir_create_failed: "Cannot create storage directory: {0}"
+    database_dir_create_failed: "Cannot create database directory: {0}"
+    storage_path_required: "Please specify DICOM file storage location."
+    database_path_required: "Please specify database file path."
+  warning:
+    series_no_instances: "Series has no instances"
+    instance_null: "Instance or file path is null"
+    window_level_invalid: "DICOM file window/level values are abnormal: WC={0}, WW={1}, maxValue={2}"
+    window_level_parse_failed: "Window/Level parsing failed: center={0}, width={1}"
+    unsupported_bits: "Unsupported bit depth: {0}. Processing as 16bit."
+    unsupported_color: "16bit color images are not supported. Processing as grayscale."
+    all_pixels_zero: "Warning: All pixel values are 0. There may be a problem with RAW data loading."
+    image_skipped: "Image copied as-is (window/level processing skipped)"
+    messages_file_not_found: "Message file not found: {0}. Using default (Japanese)."
+    default_messages_not_found: "Default message file also not found: {0}"
+  info:
+    database_initialized: "Database initialized"
+    study_selected: "Study selected: {0}"
+    series_selected: "Series selected: {0}"
+    instance_loading: "Loading instance: {0}"
+    instance_loaded: "Instance loading completed"
+    dicom_file_loading: "Loading DICOM file: {0}"
+    dicom_file_loaded: "DICOM file loading completed"
+    window_level_loaded: "Window/Level loaded from DICOM file: WC={0}, WW={1}"
+    default_window_level_setting: "Setting default window/level: modality={0}, bitsStored={1}, maxValue={2}"
+    default_window_level_set: "Default window/level set: WC={0}, WW={1}"
+    storage_path_changed: "Storage path changed: {0}"
+    database_path_changed: "Database path changed: {0}"
+    messages_loaded: "Message file loaded: {0} (language: {1})"
+  debug:
+    pan_started: "Pan started"
+    window_level_started: "Window/Level adjustment started"
+    dicom_load_started: "DICOM file loading started (RAW data): {0}"
+    image_processing: "processImage: Processing image: {0}x{1}"
+    image_processed: "processImage: Image processing completed (bitsStored={0}, wc={1}, ww={2}, isShortType={3}, rescaleSlope={4}, rescaleIntercept={5}, photometric={6})"
+    pixel_range: "Pixel value range: {0} - {1} (isShortType={2}, sampleCount={3})"
+    rgb_skip: "Skipping window/level processing for RGB image"
+    image_reload: "Reloading image with window/level: WC={0}, WW={1}"
+    image_draw: "Image drawing: Panel size={0}x{1}, Image size={2}x{3}, zoomFactor={4}, fitScale={5}"
+    initial_display: "Initial display: effectiveZoom={0}, scaledSize={1}x{2}"
+    zoom_in: "Zoom in: scaledSize={0}x{1}"
+
+viewer:
+  no_file: "Please open a DICOM file"
+  overlay_format: "WL: {0} / WW: {1}"
+
+import:
+  dialog_title: "Select DICOM Folder"
+  progress: "Importing..."
+  completed: "Import completed"
+
+status:
+  studies_loaded: "{0} studies loaded"
+  study_selected: "Study: {0} ({1} series) - Please select a series"
+  study_not_selected: "No study selected"
+  series_selected: "Series: {0} ({1} images)"
+  study_list_load_failed: "Failed to load study list: {0}"
+  series_list_load_failed: "Failed to load series list: {0}"
+  study_list_update_failed: "Failed to update study list"
+
+series:
+  description_format: "{0} - {1} ({2} images)"
+
+language:
+  japanese: "Japanese"
+  english: "English"
+
+delete:
+  no_study_selected: "Please select a study to delete."
+  confirm_title: "Delete Confirmation"
+  confirm_message: "Do you want to delete this study?\n\nPatient Name: {0}\nStudy UID: {1}"
+  method_title: "Select Delete Method"
+  method_message: "Please select a delete method.\n\nYes: Delete both database and DCM files\nNo: Delete database only (keep DCM files)\nCancel: Abort deletion"
+  button:
+    yes: "Yes"
+    no: "No"
+    cancel: "Cancel"
+  completed_both: "Study deleted\nDatabase and DCM files: {0} files deleted"
+  completed_db_only: "Study deleted from database (DCM files are kept)"
+  failed_files: "\n({0} files failed to delete)"
+  error: "Failed to delete study:\n{0}"
+

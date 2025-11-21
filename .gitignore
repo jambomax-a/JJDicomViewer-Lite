@@ -1,0 +1,53 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Application data
+.jjdicomviewerlite/
+
+# Documentation folder (contains Vet-System and OsiriX analysis - not for public repository)
+docs/
+
+# Old VetDicomViewer project files (not needed for JJDicomViewer-Lite)
+VetDicomViewer/
+../VetDicomViewer/
+
+# SRC folder (not needed) - use specific pattern to avoid excluding src/
+# Exclude only uppercase SRC directories
+[\/]SRC[\/]
+
