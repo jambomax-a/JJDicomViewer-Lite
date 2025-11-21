@@ -379,9 +379,15 @@ task createLinuxInstaller(type: Exec) {
     dependsOn jar, build, copyLanguageFiles, createRuntimeImage
     doFirst {
         mkdir 'build/installer'
+        def postInstallScript = file('installer/linux/remove_duplicate_shortcut.sh')
+        if (!postInstallScript.exists()) {
+            throw new GradleException("Post-install script not found: ${postInstallScript.absolutePath}")
+        }
+        postInstallScript.setExecutable(true)
     }
     def iconFile = file('src/main/resources/icons/app-icon.png')
     def languageDir = file('build/resources/language')
+    def postInstallScript = file('installer/linux/remove_duplicate_shortcut.sh')
     // 明示的に作成したランタイムイメージを使用する
     def runtimeImageDir = file('build/runtime-image')
     def cmdLine = ['jpackage',
@@ -397,7 +403,8 @@ task createLinuxInstaller(type: Exec) {
         '--vendor', 'JJDicomViewer',
         '--copyright', 'Copyright 2024',
         '--java-options', '-Xmx2048m',
-        '--java-options', '--add-modules=ALL-MODULE-PATH']
+        '--java-options', '--add-modules=ALL-MODULE-PATH',
+        '--linux-post-install', postInstallScript.absolutePath]
     // アイコンファイルが存在する場合のみ追加
     if (iconFile.exists()) {
         cmdLine.addAll(['--icon', iconFile.absolutePath])
