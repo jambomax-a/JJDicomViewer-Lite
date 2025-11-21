@@ -9,11 +9,13 @@ import org.dcm4che3.io.DicomInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.Rectangle;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * DICOMファイルを読み込むクラス
@@ -504,6 +506,13 @@ public class DicomReader {
                 logger.warn("RescaleInterceptの取得に失敗: {}", e.getMessage());
                 instance.setRescaleIntercept(0.0);
             }
+
+            // ROI情報（SequenceOfUltrasoundRegions）を取得
+            Rectangle roiBounds = extractUltrasoundRoi(attrs, instance);
+            if (roiBounds != null) {
+                instance.setRoiBounds(roiBounds);
+                logger.debug("ROI bounds detected: {}", roiBounds);
+            }
             
             series.addInstance(instance);
             study.addSeries(series);
@@ -545,6 +554,57 @@ public class DicomReader {
         } catch (Exception e) {
             logger.debug("DICOMファイルの検証に失敗: {}", file, e);
             return false;
+        }
+    }
+
+    private Rectangle extractUltrasoundRoi(Attributes attrs, Instance instance) {
+        try {
+            List<Attributes> roiSequence = attrs.getSequence(Tag.SequenceOfUltrasoundRegions);
+            if (roiSequence == null || roiSequence.isEmpty()) {
+                return null;
+            }
+
+            for (Attributes region : roiSequence) {
+                int minX = safeGetRegionCoordinate(region, Tag.RegionLocationMinX0);
+                int minY = safeGetRegionCoordinate(region, Tag.RegionLocationMinY0);
+                int maxX = safeGetRegionCoordinate(region, Tag.RegionLocationMaxX1);
+                int maxY = safeGetRegionCoordinate(region, Tag.RegionLocationMaxY1);
+
+                if (minX < 0 || minY < 0 || maxX < 0 || maxY < 0) {
+                    continue;
+                }
+                if (maxX <= minX || maxY <= minY) {
+                    continue;
+                }
+
+                int width = (maxX - minX) + 1;
+                int height = (maxY - minY) + 1;
+                Rectangle roi = new Rectangle(minX, minY, width, height);
+
+                int columns = instance.getColumns() != null ? instance.getColumns() : 0;
+                int rows = instance.getRows() != null ? instance.getRows() : 0;
+                if (columns > 0 && rows > 0) {
+                    Rectangle imageBounds = new Rectangle(0, 0, columns, rows);
+                    Rectangle intersection = roi.intersection(imageBounds);
+                    if (intersection.isEmpty()) {
+                        continue;
+                    }
+                    roi = intersection;
+                }
+
+                return roi;
+            }
+        } catch (Exception e) {
+            logger.warn("SequenceOfUltrasoundRegionsからROIを抽出できませんでした: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private int safeGetRegionCoordinate(Attributes attrs, int tag) {
+        try {
+            return attrs.getInt(tag, -1);
+        } catch (Exception e) {
+            return -1;
         }
     }
 }

@@ -11,6 +11,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
+import java.awt.image.RasterFormatException;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -256,6 +257,7 @@ public class ImageViewerPanel extends JPanel {
             // 画像を読み込む
             originalImage = dicomLoader.loadDicomImage(filePath.toFile(), 
                     windowCenter, windowWidth);
+            originalImage = applyRoiIfAvailable(originalImage);
             
             if (originalImage != null) {
                 logger.debug("画像読み込み成功: サイズ={}x{}, SOPInstanceUID={}", 
@@ -449,6 +451,40 @@ public class ImageViewerPanel extends JPanel {
         
         // WW/WL変更を通知
         notifyWindowLevelChanged();
+    }
+
+    /**
+     * ROIが指定されている場合は画像をクロップ
+     */
+    private BufferedImage applyRoiIfAvailable(BufferedImage source) {
+        if (source == null || currentInstance == null || !currentInstance.hasRoi()) {
+            return source;
+        }
+
+        Rectangle roi = currentInstance.getRoiBounds();
+        if (roi == null) {
+            return source;
+        }
+
+        Rectangle imageBounds = new Rectangle(0, 0, source.getWidth(), source.getHeight());
+        Rectangle target = roi.intersection(imageBounds);
+        if (target.isEmpty()) {
+            logger.warn("ROIが画像範囲外のため適用できません: {}", roi);
+            return source;
+        }
+
+        try {
+            BufferedImage subImage = source.getSubimage(target.x, target.y, target.width, target.height);
+            BufferedImage copy = new BufferedImage(subImage.getWidth(), subImage.getHeight(), source.getType());
+            Graphics2D g2 = copy.createGraphics();
+            g2.drawImage(subImage, 0, 0, null);
+            g2.dispose();
+            logger.debug("ROIを適用: {}", target);
+            return copy;
+        } catch (RasterFormatException e) {
+            logger.warn("ROIの適用中にエラーが発生しました: {}", e.getMessage());
+            return source;
+        }
     }
     
     /**
@@ -705,6 +741,7 @@ public class ImageViewerPanel extends JPanel {
         try {
             originalImage = dicomLoader.loadDicomImage(currentInstance.getFilePath().toFile(), 
                     windowCenter, windowWidth);
+            originalImage = applyRoiIfAvailable(originalImage);
             
             if (originalImage != null) {
                 processImage();

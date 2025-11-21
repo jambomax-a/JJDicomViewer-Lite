@@ -1,5 +1,6 @@
 package com.jjdicomviewer.core;
 
+import java.awt.Rectangle;
 import java.nio.file.Path;
 
 /**
@@ -29,6 +30,9 @@ public class Instance {
     private String windowWidth;
     private Double rescaleSlope;
     private Double rescaleIntercept;
+    
+    // ROI情報（ULTRASOUND REGION）
+    private Rectangle roiBounds;
     
     public Instance() {
     }
@@ -180,6 +184,18 @@ public class Instance {
     
     public void setRescaleIntercept(Double rescaleIntercept) {
         this.rescaleIntercept = rescaleIntercept;
+    }
+    
+    public Rectangle getRoiBounds() {
+        return roiBounds;
+    }
+    
+    public void setRoiBounds(Rectangle roiBounds) {
+        this.roiBounds = roiBounds;
+    }
+    
+    public boolean hasRoi() {
+        return roiBounds != null && roiBounds.width > 0 && roiBounds.height > 0;
     }
 }
 
