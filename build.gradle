@@ -333,7 +333,7 @@ task createWindowsInstaller(type: Exec) {
     ignoreExitValue = false // MSI作成が失敗した場合はエラーを出す
 }
 
-// jpackage用の設定（macOS用）
+// jpackage用の設定（macOS用 - Apple Silicon用、デフォルト）
 task createMacOSInstaller(type: Exec) {
     // jarタスクとランタイムイメージ作成タスクを明示的に依存させて、fat JARとランタイムイメージが確実に作成されるようにする
     dependsOn jar, build, copyLanguageFiles, createRuntimeImage
@@ -367,6 +367,48 @@ task createMacOSInstaller(type: Exec) {
         cmdLine.addAll(['--icon', iconFile.absolutePath])
     }
     // 言語ファイルディレクトリが存在する場合、リソースとして追加
+    if (languageDir.exists() && languageDir.listFiles() != null && languageDir.listFiles().length > 0) {
+        cmdLine.addAll(['--resource-dir', languageDir.absolutePath])
+    }
+    commandLine cmdLine
+}
+
+// jpackage用の設定（macOS用 - Intel x86_64用）
+// 注意: このタスクはIntel Mac (x86_64) 環境で実行してください
+// jpackageは実行環境のアーキテクチャに合わせて自動的にビルドされます
+task createMacOSInstallerIntel(type: Exec) {
+    dependsOn jar, build, copyLanguageFiles, createRuntimeImage
+    doFirst {
+        mkdir 'build/installer'
+        // 実行環境がIntel Mac (x86_64) であることを確認
+        def arch = System.getProperty('os.arch')
+        if (!arch.contains('x86_64') && !arch.contains('amd64')) {
+            logger.warn("Warning: This task should be run on Intel Mac (x86_64). Current architecture: ${arch}")
+        }
+    }
+    def macAppVersion = version.startsWith('0.') ? version.replaceFirst('0\\.', '1.') : version
+    def iconFile = file('src/main/resources/icons/app-icon.icns')
+    def languageDir = file('build/resources/language')
+    def runtimeImageDir = file('build/runtime-image')
+    def cmdLine = ['jpackage',
+        '--input', 'build/libs',
+        '--name', 'JJDicomViewer-Lite-Intel',
+        '--main-jar', "JJDicomViewer-Lite-${version}.jar",
+        '--main-class', 'com.jjdicomviewer.app.JJDicomViewerApp',
+        '--runtime-image', runtimeImageDir.absolutePath,
+        '--type', 'dmg',
+        '--dest', 'build/installer',
+        '--app-version', macAppVersion,
+        '--description', 'JJ Dicom Viewer 簡易版 (Intel Mac)',
+        '--vendor', 'JJDicomViewer',
+        '--copyright', 'Copyright 2024',
+        '--mac-package-identifier', 'com.jjdicomviewer.lite.intel',
+        '--mac-package-name', 'JJDicomViewer-Lite-Intel',
+        '--java-options', '-Xmx2048m',
+        '--java-options', '--add-modules=ALL-MODULE-PATH']
+    if (iconFile.exists()) {
+        cmdLine.addAll(['--icon', iconFile.absolutePath])
+    }
     if (languageDir.exists() && languageDir.listFiles() != null && languageDir.listFiles().length > 0) {
         cmdLine.addAll(['--resource-dir', languageDir.absolutePath])
     }
