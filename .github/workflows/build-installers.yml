@@ -195,6 +195,8 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    # 注意: GitHub ActionsのmacOSランナーは現在Apple Silicon (arm64) のみ
+    # Intel (x86_64) 版はローカルでビルドしてください: ./gradlew createMacOSInstallerIntel
     steps:
       - uses: actions/checkout@v4
       
@@ -224,8 +226,11 @@ jobs:
           jpackage --version || echo "jpackage not found"
           which jpackage || echo "jpackage not in PATH"
           java -version
+          echo "Current architecture: $(uname -m)"
+          echo "Note: This build creates Apple Silicon (arm64) version"
+          echo "For Intel (x86_64) version, build locally with: ./gradlew createMacOSInstallerIntel"
       
-      - name: Create macOS Installer
+      - name: Create macOS Installer (Apple Silicon)
         run: |
           echo "=== Starting macOS installer build ==="
           echo "JAR file check:"
@@ -315,6 +320,38 @@ jobs:
           path: build/installer/
           if-no-files-found: ignore
         continue-on-error: true
+
+  # 注意: 現在、GitHub ActionsにはIntel Macランナーが存在しないため、このジョブは実行されません
+  # Intel (x86_64) 版はローカルでビルドしてください: ./gradlew createMacOSInstallerIntel
+  # 将来的にIntel Macランナーが利用可能になった場合、このジョブを有効化してください
+  # build-macos-intel:
+  #   runs-on: macos-latest-x86_64  # このランナーは現在存在しません
+  #   if: false  # 現在は実行しない
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Set up JDK
+  #       uses: actions/setup-java@v4
+  #       with:
+  #         java-version: '17'
+  #         distribution: 'temurin'
+  #     - name: Setup Gradle
+  #       uses: gradle/gradle-build-action@v2
+  #       with:
+  #         gradle-version: '9.0.0'
+  #     - name: Generate Gradle Wrapper
+  #       run: gradle wrapper --gradle-version 9.0.0
+  #     - name: Grant execute permission for gradlew
+  #       run: chmod +x gradlew
+  #     - name: Build with Gradle
+  #       run: ./gradlew build --no-daemon
+  #     - name: Create macOS Installer (Intel)
+  #       run: ./gradlew createMacOSInstallerIntel --no-daemon
+  #     - name: Upload macOS Installer (Intel)
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: macos-installer-intel
+  #         path: build/installer/
+  #         if-no-files-found: ignore
 
   build-linux:
     runs-on: ubuntu-latest
