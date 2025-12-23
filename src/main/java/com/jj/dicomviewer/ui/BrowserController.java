@@ -171,7 +171,13 @@ public class BrowserController extends JFrame {
      */
     private void initializeUIComponents() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1200, 800);
+        
+        // HOROS-20240407準拠: BrowserController.m 14183-14188行目
+        // ウィンドウ位置・サイズを復元
+        restoreWindowFrame();
+        
+        // HOROS-20240407準拠: MainMenu.xibからメニューバーを実装
+        initializeMenuBar();
         
         Container contentPane = getContentPane();
         contentPane.setLayout(new BorderLayout());
@@ -179,10 +185,14 @@ public class BrowserController extends JFrame {
         // ========== 左側サイドバー（垂直スプリッター） ==========
         // HOROS-20240407準拠: splitAlbums - Albums | Sources | Activity
         // HOROS-20240407準拠: BrowserController.h 111行目 IBOutlet NSSplitView *splitAlbums;
+        // HOROS-20240407準拠: MainMenu.xib 4078行目 - splitAlbumsは垂直分割でAlbums、Sources、Activityを含む
+        // Java SwingのJSplitPaneは2分割しかできないため、入れ子構造にする必要がある
         JSplitPane splitAlbums = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         
         // Albums（上）
         // HOROS-20240407準拠: BrowserController.h 133行目 IBOutlet NSTableView *albumTable;
+        // HOROS-20240407準拠: MainMenu.xib 4082行目 - box id="11696" (Albums)
+        // HOROS-20240407準拠: MainMenu.xib 4104行目 - tableHeaderCell title="Albums"
         String[] albumColumns = {"アルバム名", "スタディ数"};
         javax.swing.table.DefaultTableModel albumModel = new javax.swing.table.DefaultTableModel(albumColumns, 0) {
             @Override
@@ -197,31 +207,80 @@ public class BrowserController extends JFrame {
                 refreshDatabase(null);
             }
         });
+        // HOROS-20240407準拠: MainMenu.xib 4104行目 - tableHeaderCell title="Albums"
+        albumTable.getTableHeader().setReorderingAllowed(false);
         JScrollPane albumScroll = new JScrollPane(albumTable);
+        // HOROS-20240407準拠: MainMenu.xib 4082行目 - box title="Albums" titlePosition="noTitle"
+        // Java SwingではTitledBorderで見出しを表示
+        albumScroll.setBorder(javax.swing.BorderFactory.createTitledBorder(
+            javax.swing.BorderFactory.createEmptyBorder(),
+            "Albums",
+            javax.swing.border.TitledBorder.LEFT,
+            javax.swing.border.TitledBorder.TOP
+        ));
         splitAlbums.setTopComponent(albumScroll);
         
+        // SourcesとActivityを垂直に分割（下部）
+        // HOROS-20240407準拠: MainMenu.xib 4196行目 - box id="11697" (Sources)
+        // HOROS-20240407準拠: MainMenu.xib 4225行目 - tableView id="14153" (Activity)
+        JSplitPane splitSourcesActivity = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+        
         // Sources（中）- データベースリスト
-        // HOROS-20240407準拠: BrowserController.h 130行目 IBOutlet MyOutlineView *databaseOutline;
-        // HOROS-20240407準拠: 左サイドバーのSourcesはデータベースリストを表示
-        // TODO: HOROS-20240407のSources実装を確認して実装
+        // HOROS-20240407準拠: BrowserController.h 180行目 IBOutlet NSTableView *_sourcesTableView;
+        // HOROS-20240407準拠: MainMenu.xib 4142行目 - box id="11698" title="Sources" titlePosition="noTitle"
+        // HOROS-20240407準拠: MainMenu.xib 4164行目 - tableHeaderCell title="Sources"
         JList<String> sourcesList = new JList<>(new String[]{"Documents DB", "Description"});
         sourcesList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         JScrollPane sourcesScroll = new JScrollPane(sourcesList);
-        splitAlbums.setBottomComponent(sourcesScroll);
-        splitAlbums.setResizeWeight(0.3); // Albumsが30%
-        splitAlbums.setDividerLocation(150);
+        // HOROS-20240407準拠: MainMenu.xib 4142行目 - box title="Sources" titlePosition="noTitle"
+        // Java SwingではTitledBorderで見出しを表示
+        sourcesScroll.setBorder(javax.swing.BorderFactory.createTitledBorder(
+            javax.swing.BorderFactory.createEmptyBorder(),
+            "Sources",
+            javax.swing.border.TitledBorder.LEFT,
+            javax.swing.border.TitledBorder.TOP
+        ));
+        splitSourcesActivity.setTopComponent(sourcesScroll);
         
         // Activity（下）
         // HOROS-20240407準拠: BrowserController+Activity.h
+        // HOROS-20240407準拠: BrowserController+Activity.mm 64-72行目
+        // HOROS-20240407準拠: MainMenu.xib 4225行目 - tableView id="14153" customClass="ThreadsTableView"
         activityHelper = new BrowserActivityHelper(this);
-        JPanel activityPanel = new JPanel(new BorderLayout());
-        // TODO: ActivityHelperからUIコンポーネントを取得して追加
         
-        // SourcesとActivityを垂直に分割
-        JSplitPane leftSidebar = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        leftSidebar.setTopComponent(splitAlbums);
-        leftSidebar.setBottomComponent(activityPanel);
-        leftSidebar.setResizeWeight(0.7); // 上部が70%
+        // HOROS-20240407準拠: BrowserController+Activity.mm 67-68行目
+        // [_activityTableView setDelegate: _activityHelper];
+        // [_activityTableView setDataSource: _activityHelper];
+        this.activityTableView = new javax.swing.JTable(activityHelper);
+        // HOROS-20240407準拠: BrowserController.m 338行目 - Regular mode: 38
+        this.activityTableView.setRowHeight(38);
+        // HOROS-20240407準拠: MainMenu.xib 4225行目 - headerView="14179" (Activityヘッダーあり)
+        // HOROS-20240407準拠: MainMenu.xib 4233行目 - tableHeaderCell title="Activity"
+        // Activityテーブルにはヘッダーがあり、"Activity"というタイトルが表示される
+        this.activityTableView.getTableHeader().setReorderingAllowed(false);
+        this.activityTableView.setShowGrid(false);
+        this.activityTableView.setIntercellSpacing(new java.awt.Dimension(0, 0));
+        
+        // HOROS-20240407準拠: ThreadCellRendererを使用してThreadCellを表示
+        this.activityTableView.setDefaultRenderer(Object.class, new com.jj.dicomviewer.ui.ThreadCellRenderer(activityHelper));
+        
+        // HOROS-20240407準拠: Activityパネルにテーブルを追加
+        // HOROS-20240407準拠: MainMenu.xib 4211行目 - box id="14167" title="Threads" titlePosition="noTitle"
+        // HOROS-20240407準拠: MainMenu.xib 4233行目 - tableHeaderCell title="Activity"
+        // Activityテーブルのヘッダーに"Activity"が表示されるため、TitledBorderは不要
+        JScrollPane activityScroll = new JScrollPane(this.activityTableView);
+        activityScroll.setBorder(null);
+        splitSourcesActivity.setBottomComponent(activityScroll);
+        splitSourcesActivity.setResizeWeight(0.6); // Sourcesが60%
+        
+        // splitAlbumsの下部にSourcesとActivityを含むスプリッターを設定
+        splitAlbums.setBottomComponent(splitSourcesActivity);
+        splitAlbums.setResizeWeight(0.3); // Albumsが30%
+        splitAlbums.setDividerLocation(150);
+        
+        // HOROS-20240407準拠: awakeActivityを呼び出す（BrowserController.m 14432行目）
+        // ただし、activityHelperは既に初期化済みなので、ここではactivityTableViewの設定のみ行う
+        // 実際のawakeActivity相当の処理はBrowserActivityHelperのコンストラクタで行われる
         
         // ========== 右側メインパネル（垂直スプリッター） ==========
         // HOROS-20240407準拠: splitViewVert - 上部テーブルエリア | 下部プレビューエリア
@@ -289,8 +348,10 @@ public class BrowserController extends JFrame {
         // ========== メインウィンドウ（水平スプリッター） ==========
         // HOROS-20240407準拠: splitViewHorz - 左サイドバー | 右メインパネル
         // HOROS-20240407準拠: BrowserController.h 111行目 IBOutlet NSSplitView *splitViewHorz;
+        // HOROS-20240407準拠: MainMenu.xib 12422行目 - splitView id="12422"
         JSplitPane splitViewHorz = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitViewHorz.setLeftComponent(leftSidebar);
+        // HOROS-20240407準拠: splitAlbumsは左サイドバー全体（Albums、Sources、Activityを含む）
+        splitViewHorz.setLeftComponent(splitAlbums);
         splitViewHorz.setRightComponent(splitViewVert);
         splitViewHorz.setResizeWeight(0.2); // 左サイドバーが20%
         
@@ -307,8 +368,104 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: ドラッグ&ドロップ対応
         setupDragAndDrop();
         
+        // HOROS-20240407準拠: awakeActivityを呼び出す（BrowserController.m 14432行目）
+        // BrowserController+Activity.mm 64-72行目で_activityTableViewのdelegateとdataSourceを設定
+        // ただし、JavaではactivityHelperのコンストラクタで既に設定されているため、ここでは不要
+        // 念のため、activityTableViewが正しく設定されていることを確認
+        if (this.activityTableView != null && activityHelper != null) {
+            // activityTableViewは既にactivityHelperをTableModelとして設定済み
+            // BrowserActivityHelperがThreadsManagerを監視して自動的に更新される
+        }
+        
         // アルバムテーブルのデータを更新
         updateAlbumTable();
+        
+        // HOROS-20240407準拠: BrowserController.m 14682行目
+        // ウィンドウが閉じられる時に位置・サイズを保存
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                saveWindowFrame();
+                saveDatabaseColumnState();
+                saveSortState();
+            }
+        });
+    }
+    
+    /**
+     * ウィンドウ位置・サイズを復元
+     * HOROS-20240407準拠: BrowserController.m 14183-14188行目
+     * r = NSRectFromString( [[NSUserDefaults standardUserDefaults] stringForKey: @"DBWindowFrame"]);
+     * if( NSIsEmptyRect( r)) // No position for the window -> fullscreen
+     *     [[self window] zoom: self];
+     * else
+     *     [self.window setFrame: r display: YES];
+     */
+    private void restoreWindowFrame() {
+        try {
+            Preferences prefs = Preferences.userNodeForPackage(BrowserController.class);
+            String frameStr = prefs.get("DBWindowFrame", null);
+            
+            if (frameStr != null && !frameStr.isEmpty()) {
+                // 形式: "x,y,width,height"
+                String[] parts = frameStr.split(",");
+                if (parts.length == 4) {
+                    try {
+                        int x = Integer.parseInt(parts[0]);
+                        int y = Integer.parseInt(parts[1]);
+                        int width = Integer.parseInt(parts[2]);
+                        int height = Integer.parseInt(parts[3]);
+                        
+                        // 画面内に収まるかチェック
+                        java.awt.GraphicsEnvironment ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment();
+                        java.awt.GraphicsDevice[] screens = ge.getScreenDevices();
+                        boolean isValidPosition = false;
+                        
+                        for (java.awt.GraphicsDevice screen : screens) {
+                            java.awt.Rectangle screenBounds = screen.getDefaultConfiguration().getBounds();
+                            if (x >= screenBounds.x && y >= screenBounds.y && 
+                                x + width <= screenBounds.x + screenBounds.width &&
+                                y + height <= screenBounds.y + screenBounds.height) {
+                                isValidPosition = true;
+                                break;
+                            }
+                        }
+                        
+                        if (isValidPosition) {
+                            setBounds(x, y, width, height);
+                            return;
+                        }
+                    } catch (NumberFormatException e) {
+                        // 無効な形式の場合はデフォルトサイズを使用
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // エラーが発生した場合はデフォルトサイズを使用
+        }
+        
+        // デフォルトサイズ（画面中央に配置）
+        setSize(1200, 800);
+        setLocationRelativeTo(null);
+    }
+    
+    /**
+     * ウィンドウ位置・サイズを保存
+     * HOROS-20240407準拠: BrowserController.m 14682行目
+     * [[NSUserDefaults standardUserDefaults] setObject: NSStringFromRect( self.window.frame) forKey: @"DBWindowFrame"];
+     */
+    private void saveWindowFrame() {
+        try {
+            java.awt.Rectangle bounds = getBounds();
+            // 形式: "x,y,width,height"
+            String frameStr = bounds.x + "," + bounds.y + "," + bounds.width + "," + bounds.height;
+            
+            Preferences prefs = Preferences.userNodeForPackage(BrowserController.class);
+            prefs.put("DBWindowFrame", frameStr);
+            prefs.flush();
+        } catch (Exception e) {
+            // エラーが発生した場合は保存をスキップ
+        }
     }
     
     /**
@@ -379,34 +536,165 @@ public class BrowserController extends JFrame {
     }
     
     /**
-     * ファイルをインポート
-     * HOROS-20240407準拠: BrowserController.m 1472行目
-     * [self.database addFilesAtPaths:localFiles]
+     * ファイルとフォルダをデータベースに追加
+     * HOROS-20240407準拠: - (void) addFilesAndFolderToDatabase:(NSArray*) filenames (864行目)
      * 
-     * 注意: HOROS-20240407ではパラメータなしで呼び出しているが、
-     * デフォルトでpostNotifications:YESが設定される
+     * このメソッドはファイルを収集してから、copyFilesIntoDatabaseIfNeededを呼び出す
+     * HOROS-20240407準拠: BrowserController.m 864-998行目
      */
-    public void importFiles(List<String> filePaths) {
-        if (database == null || filePaths == null || filePaths.isEmpty()) {
+    public void addFilesAndFolderToDatabase(List<String> filenames) {
+        if (database == null || filenames == null || filenames.isEmpty()) {
             return;
         }
         
-        // HOROS-20240407準拠: メインスレッドで実行（BrowserController.m 1472行目はメインスレッド）
-        // ただし、addFilesAtPaths内部でバックグラウンド処理が行われる
-        try {
-            // HOROS-20240407準拠: パラメータなしで呼び出し（デフォルトでpostNotifications:YES）
-            // 実際の実装では、デフォルトでpostNotifications:trueが設定される
-            database.addFilesAtPaths(filePaths);
-            
-            // HOROS-20240407準拠: インポート後にUIを更新
-            // 通知が送信されるので、自動的にUIが更新されるはずだが、念のため明示的に更新
-            SwingUtilities.invokeLater(() -> {
-                refreshDatabase(null);
-            });
-        } catch (Exception e) {
-            // TODO: ログ出力（HOROS-20240407準拠のログシステムを使用）
-            // e.printStackTrace(); // デバッグ用（コメントアウト）
+        // HOROS-20240407準拠: BrowserController.m 870行目
+        // NSMutableArray *filesArray = [[[NSMutableArray alloc] initWithCapacity:0] autorelease];
+        List<String> filesArray = new ArrayList<>();
+        
+        // HOROS-20240407準拠: BrowserController.m 872-995行目
+        for (String filename : filenames) {
+            try {
+                java.io.File file = new java.io.File(filename);
+                if (!file.exists()) {
+                    continue;
+                }
+                
+                // HOROS-20240407準拠: BrowserController.m 878行目
+                // if( [[filename lastPathComponent] characterAtIndex: 0] != '.')
+                String lastComponent = file.getName();
+                if (lastComponent.isEmpty() || lastComponent.charAt(0) == '.') {
+                    continue;
+                }
+                
+                if (file.isDirectory()) {
+                    // HOROS-20240407準拠: BrowserController.m 880-950行目
+                    // ディレクトリの場合は再帰的にファイルを列挙
+                    // ただし、pagesやapp拡張子のディレクトリはスキップ
+                    String extension = getPathExtension(filename);
+                    if ("pages".equals(extension) || "app".equals(extension)) {
+                        continue;
+                    }
+                    
+                    // HOROS-20240407準拠: BrowserController.m 886行目
+                    // NSDirectoryEnumerator *enumer = [[NSFileManager defaultManager] enumeratorAtPath: filename];
+                    String folderSkip = null;
+                    try {
+                        java.nio.file.Files.walk(java.nio.file.Paths.get(filename))
+                            .filter(p -> {
+                                try {
+                                    return java.nio.file.Files.isRegularFile(p);
+                                } catch (Exception e) {
+                                    return false;
+                                }
+                            })
+                            .forEach(p -> {
+                                try {
+                                    String itemPath = p.toString();
+                                    String pathname = java.nio.file.Paths.get(filename).relativize(p).toString();
+                                    
+                                    // HOROS-20240407準拠: BrowserController.m 901-903行目
+                                    // folderSkipの処理（簡略化）
+                                    
+                                    // HOROS-20240407準拠: BrowserController.m 909行目
+                                    String itemLastComponent = p.getFileName().toString();
+                                    if (itemLastComponent.isEmpty() || itemLastComponent.charAt(0) == '.') {
+                                        return;
+                                    }
+                                    
+                                    // HOROS-20240407準拠: BrowserController.m 911-935行目
+                                    // 特殊なファイルタイプの処理
+                                    String itemExtension = getPathExtension(itemPath);
+                                    if ("dcmURLs".equals(itemExtension)) {
+                                        // TODO: asyncWADODownloadの実装
+                                        // HOROS-20240407準拠: BrowserController.m 913-917行目
+                                    } else if ("zip".equals(itemExtension) || "osirixzip".equals(itemExtension)) {
+                                        // TODO: ZIP解凍の実装
+                                        // HOROS-20240407準拠: BrowserController.m 919-930行目
+                                    } else if ("DICOMDIR".equalsIgnoreCase(itemLastComponent) || "DICOMDIR.".equalsIgnoreCase(itemLastComponent)) {
+                                        // TODO: addDICOMDIRの実装
+                                        // HOROS-20240407準拠: BrowserController.m 932-933行目
+                                    } else {
+                                        // HOROS-20240407準拠: BrowserController.m 935行目
+                                        filesArray.add(itemPath);
+                                    }
+                                } catch (Exception e) {
+                                    // HOROS-20240407準拠: BrowserController.m 944-947行目
+                                    // エラーが発生したファイルはスキップ
+                                }
+                            });
+                    } catch (Exception e) {
+                        // エラーが発生したディレクトリはスキップ
+                    }
+                } else {
+                    // HOROS-20240407準拠: BrowserController.m 952-984行目
+                    // ファイルの場合
+                    String extension = getPathExtension(filename);
+                    if ("xml".equals(extension)) {
+                        // TODO: asyncWADOXMLDownloadURLの実装
+                        // HOROS-20240407準拠: BrowserController.m 954-956行目
+                    } else if ("dcmURLs".equals(extension)) {
+                        // TODO: asyncWADODownloadの実装
+                        // HOROS-20240407準拠: BrowserController.m 958-964行目
+                    } else if ("zip".equals(extension) || "osirixzip".equals(extension)) {
+                        // TODO: ZIP解凍の実装
+                        // HOROS-20240407準拠: BrowserController.m 966-977行目
+                    } else if ("DICOMDIR".equalsIgnoreCase(lastComponent) || "DICOMDIR.".equalsIgnoreCase(lastComponent)) {
+                        // TODO: addDICOMDIRの実装
+                        // HOROS-20240407準拠: BrowserController.m 979-980行目
+                    } else if ("app".equals(extension)) {
+                        // HOROS-20240407準拠: BrowserController.m 981-983行目
+                        // appファイルはスキップ
+                    } else {
+                        // HOROS-20240407準拠: BrowserController.m 984行目
+                        filesArray.add(filename);
+                    }
+                }
+            } catch (Exception e) {
+                // HOROS-20240407準拠: BrowserController.m 989-992行目
+                // エラーが発生したファイルはスキップ
+            }
         }
+        
+        // HOROS-20240407準拠: BrowserController.m 997行目
+        // [self copyFilesIntoDatabaseIfNeeded: filesArray options: [NSDictionary dictionaryWithObjectsAndKeys: ...]]
+        if (!filesArray.isEmpty()) {
+            Map<String, Object> options = new HashMap<>();
+            // HOROS-20240407準拠: BrowserController.m 997行目
+            // [[NSUserDefaults standardUserDefaults] objectForKey: @"onlyDICOM"]
+            // TODO: UserDefaultsから取得
+            // options.put("onlyDICOM", ...);
+            options.put("async", true); // HOROS-20240407準拠: [NSNumber numberWithBool: YES], @"async"
+            options.put("addToAlbum", true); // HOROS-20240407準拠: [NSNumber numberWithBool: YES], @"addToAlbum"
+            options.put("selectStudy", true); // HOROS-20240407準拠: [NSNumber numberWithBool: YES], @"selectStudy"
+            copyFilesIntoDatabaseIfNeeded(filesArray, options);
+        }
+    }
+    
+    /**
+     * パスの拡張子を取得
+     * HOROS-20240407準拠: [NSString pathExtension]
+     */
+    private String getPathExtension(String path) {
+        if (path == null || path.isEmpty()) {
+            return "";
+        }
+        int lastDot = path.lastIndexOf('.');
+        int lastSep = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        if (lastDot > lastSep && lastDot < path.length() - 1) {
+            return path.substring(lastDot + 1).toLowerCase();
+        }
+        return "";
+    }
+    
+    /**
+     * ファイルをインポート
+     * HOROS-20240407準拠: addFilesAndFolderToDatabaseを呼び出す
+     * 
+     * 注意: このメソッドは後方互換性のために残されている
+     * 新しいコードではaddFilesAndFolderToDatabaseを使用すること
+     */
+    public void importFiles(List<String> filePaths) {
+        addFilesAndFolderToDatabase(filePaths);
     }
     
     /**
@@ -440,6 +728,13 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: BrowserController.m 14316行目
         // カラム状態を復元
         restoreDatabaseColumnState();
+        
+        // HOROS-20240407準拠: ソート状態を復元
+        // HOROS-20240407準拠: restoreColumnStateの後にrestoreSortStateを呼び出す（14315-14333行目）
+        // 列の状態が復元された後にソート状態を復元するため、SwingUtilities.invokeLaterで遅延させる
+        SwingUtilities.invokeLater(() -> {
+            restoreSortState();
+        });
         
         // HOROS-20240407準拠: BrowserController.m 14738行目
         // ウィンドウが閉じられる時にカラム状態を保存
@@ -653,22 +948,41 @@ public class BrowserController extends JFrame {
             if (options != null) {
                 dict.putAll(options);
             }
-            dict.put("filesInput", newFilesToCopyList);
+            dict.put("filesInput", filesInput); // HOROS-20240407準拠: filesInputをそのまま使用（newFilesToCopyListではなく）
             dict.put("copyFiles", copyFiles);
             
             // HOROS-20240407準拠: NSThread *t = [[[NSThread alloc] initWithTarget:_database.independentDatabase selector:@selector(copyFilesThread:) object: dict] autorelease]; (2289行目)
+            // HOROS-20240407準拠: BrowserController.m 2288-2291行目
+            // メインスレッドでない場合はindependentDatabaseを使用、メインスレッドの場合はdatabaseを使用
             Thread thread = new Thread(() -> {
                 database.copyFilesThread(dict);
             });
             
             // HOROS-20240407準拠: t.name = NSLocalizedString( @"Copying and indexing files...", nil); (2294行目)
-            thread.setName("Indexing files...");
+            if (copyFiles) {
+                if (options != null && Boolean.TRUE.equals(options.get("mountedVolume"))) {
+                    thread.setName("Copying and indexing files from CD/DVD...");
+                } else {
+                    thread.setName("Copying and indexing files...");
+                }
+            } else {
+                if (options != null && Boolean.TRUE.equals(options.get("mountedVolume"))) {
+                    thread.setName("Indexing files from CD/DVD...");
+                } else {
+                    thread.setName("Indexing files...");
+                }
+            }
             
+            // HOROS-20240407準拠: t.status = N2LocalizedSingularPluralCount( [filesInput count], NSLocalizedString(@"file", nil), NSLocalizedString(@"files", nil)); (2295行目)
+            // HOROS-20240407準拠: t.supportsCancel = YES; (2296行目)
             // HOROS-20240407準拠: [[ThreadsManager defaultManager] addThreadAndStart: t]; (2297行目)
             ThreadsManager.defaultManager().addThreadAndStart(thread);
         } else {
             // 同期処理（TODO: 実装）
             // HOROS-20240407準拠: Wait *splash = [[Wait alloc] initWithString: NSLocalizedString(@"Copying into Database...", nil)]; (2301行目)
+            // 同期処理の場合は、Waitスプラッシュを表示してから処理を実行
+            // 現在は非同期処理のみをサポート
+            // 同期処理が必要な場合は、async=falseを設定して呼び出す
         }
     }
     
@@ -719,9 +1033,53 @@ public class BrowserController extends JFrame {
                 }
             }
             
+            // HOROS-20240407準拠: ソート処理 (BrowserController.m 3193-3265行目)
+            // HOROS-20240407準拠: NSSortDescriptor * sortdate = [[[NSSortDescriptor alloc] initWithKey: @"date" ascending:NO] autorelease];
+            // HOROS-20240407準拠: デフォルトはname（昇順、caseInsensitiveCompare）とdate（降順）
+            synchronized (outlineViewArray) {
+                if (!outlineViewArray.isEmpty()) {
+                    // HOROS-20240407準拠: ソート記述子を決定
+                    String primarySortColumn = sortColumn;
+                    boolean primaryAscending = sortAscending;
+                    
+                    // HOROS-20240407準拠: ソート列が未設定または空の場合はデフォルト（name昇順、date降順）
+                    if (primarySortColumn == null || primarySortColumn.isEmpty()) {
+                        primarySortColumn = "name";
+                        primaryAscending = true;
+                    }
+                    
+                    // HOROS-20240407準拠: ソート実行
+                    java.util.Comparator<Object> comparator = createSortComparator(primarySortColumn, primaryAscending);
+                    outlineViewArray.sort(comparator);
+                    
+                    // HOROS-20240407準拠: name以外の列でソートした場合は、dateで二次ソート（降順）
+                    if (!"name".equals(primarySortColumn)) {
+                        java.util.Comparator<Object> dateComparator = createSortComparator("date", false);
+                        outlineViewArray.sort(comparator.thenComparing(dateComparator));
+                    } else {
+                        // HOROS-20240407準拠: nameでソートした場合は、dateで二次ソート（降順）
+                        java.util.Comparator<Object> dateComparator = createSortComparator("date", false);
+                        outlineViewArray.sort(comparator.thenComparing(dateComparator));
+                    }
+                }
+            }
+            
             // HOROS-20240407準拠: アウトラインビューを更新
             if (databaseOutline != null) {
                 SwingUtilities.invokeLater(() -> {
+                    // HOROS-20240407準拠: ソートインジケーターを更新
+                    // HOROS-20240407準拠: デフォルトはname昇順（BrowserController.m 3198行目）
+                    // HOROS-20240407準拠: 列が表示されている場合のみソートインジケーターを表示
+                    String currentSortCol = (sortColumn != null && !sortColumn.isEmpty()) ? sortColumn : "name";
+                    boolean currentSortAsc = (sortColumn != null && !sortColumn.isEmpty()) ? sortAscending : true;
+                    // HOROS-20240407準拠: 列が表示されている場合のみソートインジケーターを更新
+                    if (databaseOutline.isColumnWithIdentifierVisible(currentSortCol)) {
+                        databaseOutline.updateSortIndicator(currentSortCol, currentSortAsc);
+                    } else {
+                        // HOROS-20240407準拠: 列が非表示の場合はソートインジケーターを表示しない
+                        databaseOutline.updateSortIndicator(null, true);
+                    }
+                    
                     // HOROS-20240407準拠: [databaseOutline reloadData]
                     if (databaseOutline.getTreeTableModel() != null) {
                         org.jdesktop.swingx.treetable.TreeTableModel model = databaseOutline.getTreeTableModel();
@@ -952,16 +1310,19 @@ public class BrowserController extends JFrame {
         return new ArrayList<>();
     }
     
+    // HOROS-20240407準拠: BrowserController.h 255行目 IBOutlet NSTableView* _activityTableView;
+    private javax.swing.JTable activityTableView;
+    
     /**
      * Activityテーブルビューを取得
      * HOROS-20240407準拠: - (NSTableView*)_activityTableView (BrowserController+Activity.mm 82行目)
      */
     public javax.swing.JTable getActivityTableView() {
-        // TODO: ActivityTableViewの実装
-        return null;
+        return activityTableView;
     }
     
     // HOROS-20240407準拠: ソート関連のフィールド
+    // HOROS-20240407準拠: ソート状態は保存/復元される（NSUserDefaults相当）
     private String sortColumn = null;
     private boolean sortAscending = true;
     
@@ -984,10 +1345,116 @@ public class BrowserController extends JFrame {
     /**
      * ソート列を設定
      * HOROS-20240407準拠: - (void)setSortColumn: (NSString*) column ascending: (BOOL) ascending (BrowserController.m)
+     * HOROS-20240407準拠: outlineView:sortDescriptorsDidChange: (6665行目) - ソート変更時にoutlineViewRefreshを呼び出す
      */
     public void setSortColumn(String column, boolean ascending) {
         this.sortColumn = column;
         this.sortAscending = ascending;
+        
+        // HOROS-20240407準拠: ソート状態を保存
+        saveSortState();
+        
+        // HOROS-20240407準拠: ソートインジケーターを更新
+        if (databaseOutline != null) {
+            SwingUtilities.invokeLater(() -> {
+                databaseOutline.updateSortIndicator(column, ascending);
+            });
+        }
+        
+        // HOROS-20240407準拠: ソート変更時にoutlineViewRefreshを呼び出す
+        outlineViewRefresh();
+        
+        // HOROS-20240407準拠: name以外の列でソートした場合は最初の行を選択 (6669-6670行目)
+        if (column != null && !"name".equals(column) && databaseOutline != null) {
+            SwingUtilities.invokeLater(() -> {
+                if (databaseOutline.getRowCount() > 0) {
+                    databaseOutline.setRowSelectionInterval(0, 0);
+                    databaseOutline.scrollRowToVisible(0);
+                }
+            });
+        }
+    }
+    
+    /**
+     * ソート状態を保存
+     * HOROS-20240407準拠: BrowserController.m 14733-14736行目
+     * HOROS-20240407準拠: [[NSUserDefaults standardUserDefaults] setObject:sort forKey: @"databaseSortDescriptor"];
+     * HOROS-20240407準拠: NSDictionary形式で保存（keyとorderを含む）
+     */
+    private void saveSortState() {
+        try {
+            Preferences prefs = Preferences.userNodeForPackage(BrowserController.class);
+            // HOROS-20240407準拠: if( [[databaseOutline sortDescriptors] count] >= 1)
+            if (sortColumn != null && !sortColumn.isEmpty()) {
+                // HOROS-20240407準拠: NSDictionary形式で保存（keyとorderを含む）
+                // 簡易実装: "key:order"形式で保存（より堅牢な実装にはJSONライブラリを使用）
+                String sortDescriptor = sortColumn + ":" + (sortAscending ? "true" : "false");
+                prefs.put("databaseSortDescriptor", sortDescriptor);
+            } else {
+                // ソート状態が未設定の場合は削除
+                prefs.remove("databaseSortDescriptor");
+            }
+            prefs.flush();
+        } catch (Exception e) {
+            // エラーが発生した場合は保存をスキップ
+        }
+    }
+    
+    /**
+     * ソート状態を復元
+     * HOROS-20240407準拠: BrowserController.m 14318-14333行目
+     * HOROS-20240407準拠: if( [[NSUserDefaults standardUserDefaults] objectForKey: @"databaseSortDescriptor"])
+     * HOROS-20240407準拠: NSDictionary形式から復元（keyとorderを含む）
+     * HOROS-20240407準拠: [databaseOutline setSortDescriptors:...]でソート状態を設定
+     */
+    private void restoreSortState() {
+        try {
+            Preferences prefs = Preferences.userNodeForPackage(BrowserController.class);
+            String sortDescriptor = prefs.get("databaseSortDescriptor", null);
+            if (sortDescriptor != null && !sortDescriptor.isEmpty()) {
+                // HOROS-20240407準拠: NSDictionary形式から復元（keyとorderを含む）
+                // 簡易実装: "key:order"形式から復元（より堅牢な実装にはJSONライブラリを使用）
+                String[] parts = sortDescriptor.split(":", 2);
+                if (parts.length == 2) {
+                    String savedColumn = parts[0];
+                    boolean savedAscending = "true".equals(parts[1]);
+                    
+                    // HOROS-20240407準拠: ソート状態は常に復元される（列が非表示でも）
+                    // HOROS-20240407準拠: if( [databaseOutline isColumnWithIdentifierVisible: [sort objectForKey:@"key"]])
+                    // 列が表示されている場合のみソートインジケーターを表示
+                    this.sortColumn = savedColumn;
+                    this.sortAscending = savedAscending;
+                    
+                    // HOROS-20240407準拠: [databaseOutline setSortDescriptors:...]でソート状態を設定
+                    SwingUtilities.invokeLater(() -> {
+                        // HOROS-20240407準拠: 列が表示されている場合のみソートインジケーターを更新
+                        if (databaseOutline != null && databaseOutline.isColumnWithIdentifierVisible(savedColumn)) {
+                            databaseOutline.updateSortIndicator(savedColumn, savedAscending);
+                        } else {
+                            // HOROS-20240407準拠: 列が非表示の場合はソートインジケーターを表示しない
+                            databaseOutline.updateSortIndicator(null, true);
+                        }
+                        // HOROS-20240407準拠: ソート状態を復元した後、outlineViewRefreshを呼び出してソートを適用
+                        outlineViewRefresh();
+                    });
+                }
+            } else {
+                // HOROS-20240407準拠: else [databaseOutline setSortDescriptors:[NSArray arrayWithObject: [[[NSSortDescriptor alloc] initWithKey:@"name" ascending:YES selector:@selector(caseInsensitiveCompare:)] autorelease]]];
+                // 保存されたソート状態がない場合はデフォルト（name昇順）を設定
+                this.sortColumn = "name";
+                this.sortAscending = true;
+                if (databaseOutline != null) {
+                    SwingUtilities.invokeLater(() -> {
+                        databaseOutline.updateSortIndicator("name", true);
+                        outlineViewRefresh();
+                    });
+                }
+            }
+        } catch (Exception e) {
+            // エラーが発生した場合はデフォルトのソート状態を使用
+            this.sortColumn = "name";
+            this.sortAscending = true;
+        }
     }
     
     /**
@@ -1381,6 +1848,142 @@ public class BrowserController extends JFrame {
     }
     
     /**
+     * ソート用Comparatorを作成
+     * HOROS-20240407準拠: NSSortDescriptorの動作を再現
+     * HOROS-20240407準拠: BrowserController.m 3193-3199行目
+     */
+    private java.util.Comparator<Object> createSortComparator(String column, boolean ascending) {
+        return (o1, o2) -> {
+            if (!(o1 instanceof com.jj.dicomviewer.model.DicomStudy) || 
+                !(o2 instanceof com.jj.dicomviewer.model.DicomStudy)) {
+                return 0;
+            }
+            
+            com.jj.dicomviewer.model.DicomStudy study1 = (com.jj.dicomviewer.model.DicomStudy) o1;
+            com.jj.dicomviewer.model.DicomStudy study2 = (com.jj.dicomviewer.model.DicomStudy) o2;
+            
+            int result = 0;
+            
+            try {
+                switch (column) {
+                    case "name":
+                        // HOROS-20240407準拠: caseInsensitiveCompare相当
+                        String name1 = study1.getName() != null ? study1.getName() : "";
+                        String name2 = study2.getName() != null ? study2.getName() : "";
+                        result = name1.compareToIgnoreCase(name2);
+                        break;
+                    case "date":
+                        // HOROS-20240407準拠: date降順がデフォルト
+                        java.time.LocalDateTime date1 = study1.getDate();
+                        java.time.LocalDateTime date2 = study2.getDate();
+                        if (date1 == null && date2 == null) {
+                            result = 0;
+                        } else if (date1 == null) {
+                            result = 1; // nullは後ろに
+                        } else if (date2 == null) {
+                            result = -1; // nullは後ろに
+                        } else {
+                            result = date1.compareTo(date2);
+                        }
+                        break;
+                    case "patientID":
+                        String pid1 = study1.getPatientID() != null ? study1.getPatientID() : "";
+                        String pid2 = study2.getPatientID() != null ? study2.getPatientID() : "";
+                        result = pid1.compareToIgnoreCase(pid2);
+                        break;
+                    case "accessionNumber":
+                        String acc1 = study1.getAccessionNumber() != null ? study1.getAccessionNumber() : "";
+                        String acc2 = study2.getAccessionNumber() != null ? study2.getAccessionNumber() : "";
+                        result = acc1.compareToIgnoreCase(acc2);
+                        break;
+                    case "studyName":
+                        String sn1 = study1.getStudyName() != null ? study1.getStudyName() : "";
+                        String sn2 = study2.getStudyName() != null ? study2.getStudyName() : "";
+                        result = sn1.compareToIgnoreCase(sn2);
+                        break;
+                    case "modality":
+                        String mod1 = study1.getModality() != null ? study1.getModality() : "";
+                        String mod2 = study2.getModality() != null ? study2.getModality() : "";
+                        result = mod1.compareToIgnoreCase(mod2);
+                        break;
+                    case "dateAdded":
+                        java.time.LocalDateTime da1 = study1.getDateAdded();
+                        java.time.LocalDateTime da2 = study2.getDateAdded();
+                        if (da1 == null && da2 == null) {
+                            result = 0;
+                        } else if (da1 == null) {
+                            result = 1;
+                        } else if (da2 == null) {
+                            result = -1;
+                        } else {
+                            result = da1.compareTo(da2);
+                        }
+                        break;
+                    case "dateOpened":
+                        java.time.LocalDateTime do1 = study1.getDateOpened();
+                        java.time.LocalDateTime do2 = study2.getDateOpened();
+                        if (do1 == null && do2 == null) {
+                            result = 0;
+                        } else if (do1 == null) {
+                            result = 1;
+                        } else if (do2 == null) {
+                            result = -1;
+                        } else {
+                            result = do1.compareTo(do2);
+                        }
+                        break;
+                    default:
+                        // その他の列は文字列として比較
+                        String val1 = getStudyValueAsString(study1, column);
+                        String val2 = getStudyValueAsString(study2, column);
+                        result = val1.compareToIgnoreCase(val2);
+                        break;
+                }
+            } catch (Exception e) {
+                // エラーが発生した場合は0を返す（順序を変更しない）
+                result = 0;
+            }
+            
+            return ascending ? result : -result;
+        };
+    }
+    
+    /**
+     * スタディの値を文字列として取得（ソート用）
+     */
+    private String getStudyValueAsString(com.jj.dicomviewer.model.DicomStudy study, String column) {
+        try {
+            switch (column) {
+                case "id":
+                    return study.getId() != null ? study.getId() : "";
+                case "comment":
+                    return study.getComment() != null ? study.getComment() : "";
+                case "stateText":
+                    return study.getStateText() != null ? study.getStateText().toString() : "";
+                case "noFiles":
+                    return study.getNumberOfImages() != null ? study.getNumberOfImages().toString() : "0";
+                case "noSeries":
+                    return study.getSeries() != null ? String.valueOf(study.getSeries().size()) : "0";
+                case "yearOld":
+                    // TODO: 年齢計算の実装
+                    return "";
+                case "referringPhysician":
+                    return study.getReferringPhysician() != null ? study.getReferringPhysician() : "";
+                case "performingPhysician":
+                    return study.getPerformingPhysician() != null ? study.getPerformingPhysician() : "";
+                case "institutionName":
+                    return study.getInstitutionName() != null ? study.getInstitutionName() : "";
+                case "dateOfBirth":
+                    return study.getDateOfBirth() != null ? study.getDateOfBirth().toString() : "";
+                default:
+                    return "";
+            }
+        } catch (Exception e) {
+            return "";
+        }
+    }
+    
+    /**
      * 画像配列を取得
      * HOROS-20240407準拠: - (NSArray*)imagesArray: (id) item preferredObject:(id)preferredObject
      */
@@ -1763,5 +2366,1858 @@ public class BrowserController extends JFrame {
             // HOROS-20240407準拠: [comparativeTable reloadData];
             // TODO: comparativeTableの更新
         }
+    }
+    
+    /**
+     * メニューバーの初期化
+     * HOROS-20240407準拠: MainMenu.xibからメニュー構造を実装
+     * HOROS-20240407準拠: MainMenu.xib 69-397行目（Fileメニュー）
+     */
+    private void initializeMenuBar() {
+        javax.swing.JMenuBar menuBar = new javax.swing.JMenuBar();
+        
+        // ========== Fileメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 69行目 <menuItem title="File" id="848">
+        javax.swing.JMenu fileMenu = new javax.swing.JMenu("File");
+        
+        // Show Database Window
+        // HOROS-20240407準拠: MainMenu.xib 72行目
+        javax.swing.JMenuItem showDatabaseItem = new javax.swing.JMenuItem("Show Database Window");
+        showDatabaseItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_D, 0));
+        showDatabaseItem.addActionListener(e -> {
+            // TODO: データベースウィンドウを表示
+        });
+        fileMenu.add(showDatabaseItem);
+        
+        // Toggle Albums & Sources drawer
+        // HOROS-20240407準拠: MainMenu.xib 77行目
+        javax.swing.JMenuItem drawerToggleItem = new javax.swing.JMenuItem("Toggle Albums & Sources drawer");
+        drawerToggleItem.addActionListener(e -> drawerToggle(null));
+        fileMenu.add(drawerToggleItem);
+        
+        // Toggle History drawer
+        // HOROS-20240407準拠: MainMenu.xib 83行目
+        javax.swing.JMenuItem comparativeToggleItem = new javax.swing.JMenuItem("Toggle History drawer");
+        comparativeToggleItem.addActionListener(e -> comparativeToggle(null));
+        fileMenu.add(comparativeToggleItem);
+        
+        fileMenu.addSeparator();
+        
+        // New Database Folder...
+        // HOROS-20240407準拠: MainMenu.xib 92行目
+        javax.swing.JMenuItem newDatabaseFolderItem = new javax.swing.JMenuItem("New Database Folder...");
+        newDatabaseFolderItem.addActionListener(e -> createDatabaseFolder(null));
+        fileMenu.add(newDatabaseFolderItem);
+        
+        // Open Database Folder...
+        // HOROS-20240407準拠: MainMenu.xib 97行目
+        javax.swing.JMenuItem openDatabaseFolderItem = new javax.swing.JMenuItem("Open Database Folder...");
+        openDatabaseFolderItem.addActionListener(e -> openDatabase(null));
+        fileMenu.add(openDatabaseFolderItem);
+        
+        fileMenu.addSeparator();
+        
+        // Albums サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 105行目
+        javax.swing.JMenu albumsMenu = new javax.swing.JMenu("Albums");
+        
+        // Add an album...
+        // HOROS-20240407準拠: MainMenu.xib 109行目
+        javax.swing.JMenuItem addAlbumItem = new javax.swing.JMenuItem("Add an album...");
+        addAlbumItem.addActionListener(e -> addAlbum(null));
+        albumsMenu.add(addAlbumItem);
+        
+        // Add a smart album...
+        // HOROS-20240407準拠: MainMenu.xib 115行目
+        javax.swing.JMenuItem addSmartAlbumItem = new javax.swing.JMenuItem("Add a smart album...");
+        addSmartAlbumItem.addActionListener(e -> addSmartAlbum(null));
+        albumsMenu.add(addSmartAlbumItem);
+        
+        // Delete selected album
+        // HOROS-20240407準拠: MainMenu.xib 121行目
+        javax.swing.JMenuItem deleteAlbumItem = new javax.swing.JMenuItem("Delete selected album");
+        deleteAlbumItem.addActionListener(e -> {
+            // TODO: 選択されたアルバムを削除
+            int selectedRow = albumTable.getSelectedRow();
+            if (selectedRow >= 0) {
+                // deleteAlbum処理
+            }
+        });
+        albumsMenu.add(deleteAlbumItem);
+        
+        albumsMenu.addSeparator();
+        
+        // Save albums...
+        // HOROS-20240407準拠: MainMenu.xib 128行目
+        javax.swing.JMenuItem saveAlbumsItem = new javax.swing.JMenuItem("Save albums...");
+        saveAlbumsItem.addActionListener(e -> saveAlbums(null));
+        albumsMenu.add(saveAlbumsItem);
+        
+        // Import albums...
+        // HOROS-20240407準拠: MainMenu.xib 134行目
+        javax.swing.JMenuItem importAlbumsItem = new javax.swing.JMenuItem("Import albums...");
+        importAlbumsItem.addActionListener(e -> addAlbums(null));
+        albumsMenu.add(importAlbumsItem);
+        
+        albumsMenu.addSeparator();
+        
+        // Create default albums...
+        // HOROS-20240407準拠: MainMenu.xib 141行目
+        javax.swing.JMenuItem defaultAlbumsItem = new javax.swing.JMenuItem("Create default albums...");
+        defaultAlbumsItem.addActionListener(e -> {
+            // TODO: defaultAlbums実装
+        });
+        albumsMenu.add(defaultAlbumsItem);
+        
+        fileMenu.add(albumsMenu);
+        
+        fileMenu.addSeparator();
+        
+        // Report サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 153行目
+        javax.swing.JMenu reportMenu = new javax.swing.JMenu("Report");
+        
+        // Open report
+        // HOROS-20240407準拠: MainMenu.xib 156行目
+        javax.swing.JMenuItem openReportItem = new javax.swing.JMenuItem("Open report");
+        openReportItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_O, 0));
+        openReportItem.addActionListener(e -> generateReport(null));
+        reportMenu.add(openReportItem);
+        
+        // Delete report
+        // HOROS-20240407準拠: MainMenu.xib 161行目
+        javax.swing.JMenuItem deleteReportItem = new javax.swing.JMenuItem("Delete report");
+        deleteReportItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_D, 0));
+        deleteReportItem.addActionListener(e -> deleteReport(null));
+        reportMenu.add(deleteReportItem);
+        
+        reportMenu.addSeparator();
+        
+        // Convert to PDF...
+        // HOROS-20240407準拠: MainMenu.xib 167行目
+        javax.swing.JMenuItem convertToPDFItem = new javax.swing.JMenuItem("Convert to PDF...");
+        convertToPDFItem.addActionListener(e -> convertReportToPDF(null));
+        reportMenu.add(convertToPDFItem);
+        
+        // Convert to DICOM PDF
+        // HOROS-20240407準拠: MainMenu.xib 173行目
+        javax.swing.JMenuItem convertToDICOMSRItem = new javax.swing.JMenuItem("Convert to DICOM PDF");
+        convertToDICOMSRItem.addActionListener(e -> convertReportToDICOMSR(null));
+        reportMenu.add(convertToDICOMSRItem);
+        
+        fileMenu.add(reportMenu);
+        
+        fileMenu.addSeparator();
+        
+        // Import サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 185行目
+        javax.swing.JMenu importMenu = new javax.swing.JMenu("Import");
+        
+        // Import Files...
+        // HOROS-20240407準拠: MainMenu.xib 188行目
+        javax.swing.JMenuItem importFilesItem = new javax.swing.JMenuItem("Import Files...");
+        importFilesItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_O, 0));
+        importFilesItem.addActionListener(e -> importFilesFromDialog());
+        importMenu.add(importFilesItem);
+        
+        // Import Image from URL...
+        // HOROS-20240407準拠: MainMenu.xib 198行目
+        javax.swing.JMenuItem importURLItem = new javax.swing.JMenuItem("Import Image from URL...");
+        importURLItem.addActionListener(e -> {
+            // TODO: addURLToDatabase実装
+        });
+        importMenu.add(importURLItem);
+        
+        // Import Raw Data...
+        // HOROS-20240407準拠: MainMenu.xib 209行目
+        javax.swing.JMenuItem importRawDataItem = new javax.swing.JMenuItem("Import Raw Data...");
+        importRawDataItem.addActionListener(e -> importRawData(null));
+        importMenu.add(importRawDataItem);
+        
+        fileMenu.add(importMenu);
+        
+        // Export サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 222行目
+        javax.swing.JMenu exportMenu = new javax.swing.JMenu("Export");
+        
+        // Export to DICOM Network Node
+        // HOROS-20240407準拠: MainMenu.xib 225行目
+        javax.swing.JMenuItem export2PACSItem = new javax.swing.JMenuItem("Export to DICOM Network Node");
+        export2PACSItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, 0));
+        export2PACSItem.addActionListener(e -> {
+            // TODO: export2PACS実装
+        });
+        exportMenu.add(export2PACSItem);
+        
+        // Export to Movie
+        // HOROS-20240407準拠: MainMenu.xib 230行目
+        javax.swing.JMenuItem exportMovieItem = new javax.swing.JMenuItem("Export to Movie");
+        exportMovieItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, 0));
+        exportMovieItem.addActionListener(e -> {
+            // TODO: exportQuicktime実装
+        });
+        exportMenu.add(exportMovieItem);
+        
+        // Export to JPEG
+        // HOROS-20240407準拠: MainMenu.xib 235行目
+        javax.swing.JMenuItem exportJPEGItem = new javax.swing.JMenuItem("Export to JPEG");
+        exportJPEGItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_E, 0));
+        exportJPEGItem.addActionListener(e -> {
+            // TODO: exportJPEG実装
+        });
+        exportMenu.add(exportJPEGItem);
+        
+        // Export to Raw
+        // HOROS-20240407準拠: MainMenu.xib 240行目
+        javax.swing.JMenuItem exportRAWItem = new javax.swing.JMenuItem("Export to Raw");
+        exportRAWItem.addActionListener(e -> {
+            // TODO: exportRAW実装
+        });
+        exportMenu.add(exportRAWItem);
+        
+        // Export to TIFF
+        // HOROS-20240407準拠: MainMenu.xib 245行目
+        javax.swing.JMenuItem exportTIFFItem = new javax.swing.JMenuItem("Export to TIFF");
+        exportTIFFItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_E, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        exportTIFFItem.addActionListener(e -> {
+            // TODO: exportTIFF実装
+        });
+        exportMenu.add(exportTIFFItem);
+        
+        // Export to DICOM file(s)
+        // HOROS-20240407準拠: MainMenu.xib 251行目
+        javax.swing.JMenuItem exportDICOMFileItem = new javax.swing.JMenuItem("Export to DICOM file(s)");
+        exportDICOMFileItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_E, 0));
+        exportDICOMFileItem.addActionListener(e -> {
+            // TODO: exportDICOMFile実装
+        });
+        exportMenu.add(exportDICOMFileItem);
+        
+        // Export to Email
+        // HOROS-20240407準拠: MainMenu.xib 256行目
+        javax.swing.JMenuItem exportEmailItem = new javax.swing.JMenuItem("Export to Email");
+        exportEmailItem.addActionListener(e -> sendMail(null));
+        exportMenu.add(exportEmailItem);
+        
+        // Export to Photos
+        // HOROS-20240407準拠: MainMenu.xib 261行目
+        javax.swing.JMenuItem exportPhotosItem = new javax.swing.JMenuItem("Export to Photos");
+        exportPhotosItem.addActionListener(e -> {
+            // TODO: export2iPhoto実装
+        });
+        exportMenu.add(exportPhotosItem);
+        
+        // Export Displayed Database List as...
+        // HOROS-20240407準拠: MainMenu.xib 266行目
+        javax.swing.JMenuItem saveDBListItem = new javax.swing.JMenuItem("Export Displayed Database List as...");
+        saveDBListItem.addActionListener(e -> saveDBListAs(null));
+        exportMenu.add(saveDBListItem);
+        
+        fileMenu.add(exportMenu);
+        
+        fileMenu.addSeparator();
+        
+        // Burn...
+        // HOROS-20240407準拠: MainMenu.xib 277行目
+        javax.swing.JMenuItem burnItem = new javax.swing.JMenuItem("Burn...");
+        burnItem.addActionListener(e -> {
+            // TODO: burnDICOM実装
+        });
+        fileMenu.add(burnItem);
+        
+        // Anonymize...
+        // HOROS-20240407準拠: MainMenu.xib 282行目
+        javax.swing.JMenuItem anonymizeItem = new javax.swing.JMenuItem("Anonymize...");
+        anonymizeItem.addActionListener(e -> anonymizeDICOM(null));
+        fileMenu.add(anonymizeItem);
+        
+        // Copy Linked Files to Database Folder
+        // HOROS-20240407準拠: MainMenu.xib 287行目
+        javax.swing.JMenuItem copyToDBFolderItem = new javax.swing.JMenuItem("Copy Linked Files to Database Folder");
+        copyToDBFolderItem.addActionListener(e -> copyToDBFolder(null));
+        fileMenu.add(copyToDBFolderItem);
+        
+        // Search
+        // HOROS-20240407準拠: MainMenu.xib 292行目
+        javax.swing.JMenuItem searchItem = new javax.swing.JMenuItem("Search");
+        searchItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F, java.awt.event.InputEvent.CTRL_DOWN_MASK));
+        searchItem.addActionListener(e -> searchField(null));
+        fileMenu.add(searchItem);
+        
+        // Merge Selected Studies
+        // HOROS-20240407準拠: MainMenu.xib 298行目
+        javax.swing.JMenuItem mergeStudiesItem = new javax.swing.JMenuItem("Merge Selected Studies");
+        mergeStudiesItem.addActionListener(e -> mergeStudies(null));
+        fileMenu.add(mergeStudiesItem);
+        
+        // Delete Selected Exam
+        // HOROS-20240407準拠: MainMenu.xib 303行目
+        javax.swing.JMenuItem deleteExamItem = new javax.swing.JMenuItem("Delete Selected Exam");
+        deleteExamItem.addActionListener(e -> delItem(null));
+        fileMenu.add(deleteExamItem);
+        
+        // Meta-Data...
+        // HOROS-20240407準拠: MainMenu.xib 308行目
+        javax.swing.JMenuItem metaDataItem = new javax.swing.JMenuItem("Meta-Data...");
+        metaDataItem.addActionListener(e -> viewXML(null));
+        fileMenu.add(metaDataItem);
+        
+        fileMenu.addSeparator();
+        
+        // Compress selected DICOM files
+        // HOROS-20240407準拠: MainMenu.xib 316行目
+        javax.swing.JMenuItem compressFilesItem = new javax.swing.JMenuItem("Compress selected DICOM files");
+        compressFilesItem.addActionListener(e -> compressSelectedFiles(null));
+        fileMenu.add(compressFilesItem);
+        
+        // Decompress selected DICOM files
+        // HOROS-20240407準拠: MainMenu.xib 321行目
+        javax.swing.JMenuItem decompressFilesItem = new javax.swing.JMenuItem("Decompress selected DICOM files");
+        decompressFilesItem.addActionListener(e -> decompressSelectedFiles(null));
+        fileMenu.add(decompressFilesItem);
+        
+        fileMenu.addSeparator();
+        
+        // Rebuild Entire Database...
+        // HOROS-20240407準拠: MainMenu.xib 329行目
+        javax.swing.JMenuItem rebuildDatabaseItem = new javax.swing.JMenuItem("Rebuild Entire Database...");
+        rebuildDatabaseItem.addActionListener(e -> ReBuildDatabaseSheet(null));
+        fileMenu.add(rebuildDatabaseItem);
+        
+        // Rebuild SQL Index File...
+        // HOROS-20240407準拠: MainMenu.xib 347行目
+        javax.swing.JMenuItem rebuildSQLItem = new javax.swing.JMenuItem("Rebuild SQL Index File...");
+        rebuildSQLItem.addActionListener(e -> {
+            // TODO: rebuildSQLFile実装
+        });
+        fileMenu.add(rebuildSQLItem);
+        
+        // Rebuild Selected Thumbnails
+        // HOROS-20240407準拠: MainMenu.xib 365行目
+        javax.swing.JMenuItem rebuildThumbnailsItem = new javax.swing.JMenuItem("Rebuild Selected Thumbnails");
+        rebuildThumbnailsItem.addActionListener(e -> rebuildThumbnails(null));
+        fileMenu.add(rebuildThumbnailsItem);
+        
+        fileMenu.addSeparator();
+        
+        // Close Window
+        // HOROS-20240407準拠: MainMenu.xib 373行目
+        javax.swing.JMenuItem closeWindowItem = new javax.swing.JMenuItem("Close Window");
+        closeWindowItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_W, 0));
+        closeWindowItem.addActionListener(e -> dispose());
+        fileMenu.add(closeWindowItem);
+        
+        fileMenu.addSeparator();
+        
+        // Page Setup...
+        // HOROS-20240407準拠: MainMenu.xib 381行目
+        javax.swing.JMenuItem pageSetupItem = new javax.swing.JMenuItem("Page Setup...");
+        pageSetupItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_P, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        pageSetupItem.addActionListener(e -> {
+            // TODO: ページ設定ダイアログ
+        });
+        fileMenu.add(pageSetupItem);
+        
+        // Print...
+        // HOROS-20240407準拠: MainMenu.xib 386行目
+        javax.swing.JMenuItem printItem = new javax.swing.JMenuItem("Print...");
+        printItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_P, 0));
+        printItem.addActionListener(e -> {
+            // TODO: 印刷ダイアログ
+        });
+        fileMenu.add(printItem);
+        
+        // DICOM Print...
+        // HOROS-20240407準拠: MainMenu.xib 391行目
+        javax.swing.JMenuItem dicomPrintItem = new javax.swing.JMenuItem("DICOM Print...");
+        dicomPrintItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_P, java.awt.event.InputEvent.SHIFT_DOWN_MASK | java.awt.event.InputEvent.ALT_DOWN_MASK));
+        dicomPrintItem.addActionListener(e -> {
+            // TODO: DICOM印刷実装
+        });
+        fileMenu.add(dicomPrintItem);
+        
+        menuBar.add(fileMenu);
+        
+        // ========== Networkメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 400行目
+        javax.swing.JMenu networkMenu = new javax.swing.JMenu("Network");
+        
+        // Export to DICOM Network Node
+        // HOROS-20240407準拠: MainMenu.xib 404行目
+        javax.swing.JMenuItem networkExport2PACSItem = new javax.swing.JMenuItem("Export to DICOM Network Node");
+        networkExport2PACSItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, 0));
+        networkExport2PACSItem.addActionListener(e -> {
+            // TODO: export2PACS実装
+        });
+        networkMenu.add(networkExport2PACSItem);
+        
+        networkMenu.addSeparator();
+        
+        // Query / Retrieve Window...
+        // HOROS-20240407準拠: MainMenu.xib 412行目
+        javax.swing.JMenuItem queryDICOMItem = new javax.swing.JMenuItem("Query / Retrieve Window...");
+        queryDICOMItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R, java.awt.event.InputEvent.CTRL_DOWN_MASK));
+        queryDICOMItem.addActionListener(e -> {
+            // TODO: queryDICOM実装
+        });
+        networkMenu.add(queryDICOMItem);
+        
+        // Query Selected Patient from Q&R Window...
+        // HOROS-20240407準拠: MainMenu.xib 418行目
+        javax.swing.JMenuItem querySelectedStudyItem = new javax.swing.JMenuItem("Query Selected Patient from Q&R Window...");
+        querySelectedStudyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R, java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        querySelectedStudyItem.addActionListener(e -> querySelectedStudy(null));
+        networkMenu.add(querySelectedStudyItem);
+        
+        networkMenu.addSeparator();
+        
+        // Auto Query / Retrieve Window...
+        // HOROS-20240407準拠: MainMenu.xib 427行目
+        javax.swing.JMenuItem autoQueryItem = new javax.swing.JMenuItem("Auto Query / Retrieve Window...");
+        autoQueryItem.addActionListener(e -> {
+            // TODO: queryDICOM実装（tag=1）
+        });
+        networkMenu.add(autoQueryItem);
+        
+        // Auto Query / Retrieve Refresh
+        // HOROS-20240407準拠: MainMenu.xib 433行目
+        javax.swing.JMenuItem autoQueryRefreshItem = new javax.swing.JMenuItem("Auto Query / Retrieve Refresh");
+        autoQueryRefreshItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A, 0));
+        autoQueryRefreshItem.addActionListener(e -> {
+            // TODO: autoQueryRefresh実装
+        });
+        networkMenu.add(autoQueryRefreshItem);
+        
+        networkMenu.addSeparator();
+        
+        // Retrieve selected PACS On-Demand studies
+        // HOROS-20240407準拠: MainMenu.xib 441行目
+        javax.swing.JMenuItem retrievePODItem = new javax.swing.JMenuItem("Retrieve selected PACS On-Demand studies");
+        retrievePODItem.addActionListener(e -> retrieveSelectedPODStudies(null));
+        networkMenu.add(retrievePODItem);
+        
+        // Refresh PACS On-Demand results
+        // HOROS-20240407準拠: MainMenu.xib 447行目
+        javax.swing.JMenuItem refreshPODItem = new javax.swing.JMenuItem("Refresh PACS On-Demand results");
+        refreshPODItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_Y, 0));
+        refreshPODItem.addActionListener(e -> refreshPACSOnDemandResults(null));
+        networkMenu.add(refreshPODItem);
+        
+        networkMenu.addSeparator();
+        
+        // Abort Incoming DICOM Processes (Store-SCU)
+        // HOROS-20240407準拠: MainMenu.xib 455行目
+        javax.swing.JMenuItem abortStoreSCUItem = new javax.swing.JMenuItem("Abort Incoming DICOM Processes (Store-SCU)");
+        abortStoreSCUItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A, java.awt.event.InputEvent.ALT_DOWN_MASK));
+        abortStoreSCUItem.addActionListener(e -> {
+            // TODO: killAllStoreSCU実装
+        });
+        networkMenu.add(abortStoreSCUItem);
+        
+        networkMenu.addSeparator();
+        
+        // Network Logs
+        // HOROS-20240407準拠: MainMenu.xib 464行目
+        javax.swing.JMenuItem networkLogsItem = new javax.swing.JMenuItem("Network Logs");
+        networkLogsItem.addActionListener(e -> showLogWindow(null));
+        networkMenu.add(networkLogsItem);
+        
+        menuBar.add(networkMenu);
+        
+        // ========== Editメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 472行目
+        javax.swing.JMenu editMenu = new javax.swing.JMenu("Edit");
+        
+        // Undo
+        // HOROS-20240407準拠: MainMenu.xib 475行目
+        javax.swing.JMenuItem undoItem = new javax.swing.JMenuItem("Undo");
+        undoItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_Z, 0));
+        undoItem.addActionListener(e -> {
+            // TODO: undo実装
+        });
+        editMenu.add(undoItem);
+        
+        // Redo
+        // HOROS-20240407準拠: MainMenu.xib 480行目
+        javax.swing.JMenuItem redoItem = new javax.swing.JMenuItem("Redo");
+        redoItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_Z, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        redoItem.addActionListener(e -> {
+            // TODO: redo実装
+        });
+        editMenu.add(redoItem);
+        
+        editMenu.addSeparator();
+        
+        // Cut
+        // HOROS-20240407準拠: MainMenu.xib 488行目
+        javax.swing.JMenuItem cutItem = new javax.swing.JMenuItem("Cut");
+        cutItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_X, 0));
+        cutItem.addActionListener(e -> {
+            // TODO: cut実装
+        });
+        editMenu.add(cutItem);
+        
+        // Copy
+        // HOROS-20240407準拠: MainMenu.xib 493行目
+        javax.swing.JMenuItem copyItem = new javax.swing.JMenuItem("Copy");
+        copyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_C, 0));
+        copyItem.addActionListener(e -> copy(null));
+        editMenu.add(copyItem);
+        
+        // Paste
+        // HOROS-20240407準拠: MainMenu.xib 498行目
+        javax.swing.JMenuItem pasteItem = new javax.swing.JMenuItem("Paste");
+        pasteItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_V, 0));
+        pasteItem.addActionListener(e -> paste(null));
+        editMenu.add(pasteItem);
+        
+        // Select All
+        // HOROS-20240407準拠: MainMenu.xib 503行目
+        javax.swing.JMenuItem selectAllItem = new javax.swing.JMenuItem("Select All");
+        selectAllItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A, 0));
+        selectAllItem.addActionListener(e -> {
+            // TODO: selectAll実装
+        });
+        editMenu.add(selectAllItem);
+        
+        menuBar.add(editMenu);
+        
+        // ========== Formatメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 511行目
+        javax.swing.JMenu formatMenu = new javax.swing.JMenu("Format");
+        
+        // Customize Toolbar...
+        // HOROS-20240407準拠: MainMenu.xib 514行目
+        javax.swing.JMenuItem customizeToolbarItem = new javax.swing.JMenuItem("Customize Toolbar...");
+        customizeToolbarItem.addActionListener(e -> {
+            // TODO: customizeViewerToolBar実装
+        });
+        formatMenu.add(customizeToolbarItem);
+        
+        // Fullscreen
+        // HOROS-20240407準拠: MainMenu.xib 519行目
+        javax.swing.JMenuItem fullscreenItem = new javax.swing.JMenuItem("Fullscreen");
+        fullscreenItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F, 0));
+        fullscreenItem.addActionListener(e -> {
+            // TODO: fullScreenMenu実装
+        });
+        formatMenu.add(fullscreenItem);
+        
+        formatMenu.addSeparator();
+        
+        // Font サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 527行目
+        javax.swing.JMenu fontMenu = new javax.swing.JMenu("Font");
+        
+        // Show Fonts
+        // HOROS-20240407準拠: MainMenu.xib 530行目
+        javax.swing.JMenuItem showFontsItem = new javax.swing.JMenuItem("Show Fonts");
+        showFontsItem.addActionListener(e -> {
+            // TODO: フォントパネル表示
+        });
+        fontMenu.add(showFontsItem);
+        
+        // Bold
+        // HOROS-20240407準拠: MainMenu.xib 536行目
+        javax.swing.JMenuItem boldItem = new javax.swing.JMenuItem("Bold");
+        boldItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_B, 0));
+        boldItem.addActionListener(e -> {
+            // TODO: addFontTrait実装
+        });
+        fontMenu.add(boldItem);
+        
+        // Italic
+        // HOROS-20240407準拠: MainMenu.xib 541行目
+        javax.swing.JMenuItem italicItem = new javax.swing.JMenuItem("Italic");
+        italicItem.addActionListener(e -> {
+            // TODO: addFontTrait実装
+        });
+        fontMenu.add(italicItem);
+        
+        fontMenu.addSeparator();
+        
+        // Bigger
+        // HOROS-20240407準拠: MainMenu.xib 550行目
+        javax.swing.JMenuItem biggerItem = new javax.swing.JMenuItem("Bigger");
+        biggerItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_PLUS, 0));
+        biggerItem.addActionListener(e -> {
+            // TODO: modifyFont実装
+        });
+        fontMenu.add(biggerItem);
+        
+        // Smaller
+        // HOROS-20240407準拠: MainMenu.xib 555行目
+        javax.swing.JMenuItem smallerItem = new javax.swing.JMenuItem("Smaller");
+        smallerItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_MINUS, 0));
+        smallerItem.addActionListener(e -> {
+            // TODO: modifyFont実装
+        });
+        fontMenu.add(smallerItem);
+        
+        fontMenu.addSeparator();
+        
+        // Show Colors
+        // HOROS-20240407準拠: MainMenu.xib 563行目
+        javax.swing.JMenuItem showColorsItem = new javax.swing.JMenuItem("Show Colors");
+        showColorsItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_C, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        showColorsItem.addActionListener(e -> {
+            // TODO: カラーパネル表示
+        });
+        fontMenu.add(showColorsItem);
+        
+        formatMenu.add(fontMenu);
+        
+        menuBar.add(formatMenu);
+        
+        // ========== 2D Viewerメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 574行目
+        javax.swing.JMenu viewer2DMenu = new javax.swing.JMenu("2D Viewer");
+        
+        // Next Series
+        // HOROS-20240407準拠: MainMenu.xib 577行目
+        javax.swing.JMenuItem nextSeriesItem = new javax.swing.JMenuItem("Next Series");
+        nextSeriesItem.addActionListener(e -> loadSerie(null));
+        viewer2DMenu.add(nextSeriesItem);
+        
+        // Previous Series
+        // HOROS-20240407準拠: MainMenu.xib 582行目
+        javax.swing.JMenuItem previousSeriesItem = new javax.swing.JMenuItem("Previous Series");
+        previousSeriesItem.addActionListener(e -> loadSerie(null));
+        viewer2DMenu.add(previousSeriesItem);
+        
+        // Next Patient
+        // HOROS-20240407準拠: MainMenu.xib 587行目
+        javax.swing.JMenuItem nextPatientItem = new javax.swing.JMenuItem("Next Patient");
+        nextPatientItem.addActionListener(e -> loadPatient(null));
+        viewer2DMenu.add(nextPatientItem);
+        
+        // Previous Patient
+        // HOROS-20240407準拠: MainMenu.xib 593行目
+        javax.swing.JMenuItem previousPatientItem = new javax.swing.JMenuItem("Previous Patient");
+        previousPatientItem.addActionListener(e -> loadPatient(null));
+        viewer2DMenu.add(previousPatientItem);
+        
+        viewer2DMenu.addSeparator();
+        
+        // Convert between BW / RGB サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 607行目
+        javax.swing.JMenu convertBWRGBMenu = new javax.swing.JMenu("Convert between BW / RGB");
+        
+        javax.swing.JMenuItem redToBWItem = new javax.swing.JMenuItem("Red ->BW");
+        redToBWItem.addActionListener(e -> ConvertToBWMenu(null));
+        convertBWRGBMenu.add(redToBWItem);
+        
+        javax.swing.JMenuItem greenToBWItem = new javax.swing.JMenuItem("Green ->BW");
+        greenToBWItem.addActionListener(e -> ConvertToBWMenu(null));
+        convertBWRGBMenu.add(greenToBWItem);
+        
+        javax.swing.JMenuItem blueToBWItem = new javax.swing.JMenuItem("Blue ->BW");
+        blueToBWItem.addActionListener(e -> ConvertToBWMenu(null));
+        convertBWRGBMenu.add(blueToBWItem);
+        
+        javax.swing.JMenuItem rgbToBWItem = new javax.swing.JMenuItem("RGB ->BW");
+        rgbToBWItem.addActionListener(e -> ConvertToBWMenu(null));
+        convertBWRGBMenu.add(rgbToBWItem);
+        
+        convertBWRGBMenu.addSeparator();
+        
+        javax.swing.JMenuItem bwToRedItem = new javax.swing.JMenuItem("BW -> Red");
+        bwToRedItem.addActionListener(e -> ConvertToRGBMenu(null));
+        convertBWRGBMenu.add(bwToRedItem);
+        
+        javax.swing.JMenuItem bwToGreenItem = new javax.swing.JMenuItem("BW -> Green");
+        bwToGreenItem.addActionListener(e -> ConvertToRGBMenu(null));
+        convertBWRGBMenu.add(bwToGreenItem);
+        
+        javax.swing.JMenuItem bwToBlueItem = new javax.swing.JMenuItem("BW -> Blue");
+        bwToBlueItem.addActionListener(e -> ConvertToRGBMenu(null));
+        convertBWRGBMenu.add(bwToBlueItem);
+        
+        javax.swing.JMenuItem bwToRGBItem = new javax.swing.JMenuItem("BW -> RGB");
+        bwToRGBItem.addActionListener(e -> ConvertToRGBMenu(null));
+        convertBWRGBMenu.add(bwToRGBItem);
+        
+        viewer2DMenu.add(convertBWRGBMenu);
+        
+        viewer2DMenu.addSeparator();
+        
+        // Reset Image View
+        // HOROS-20240407準拠: MainMenu.xib 659行目
+        javax.swing.JMenuItem resetImageViewItem = new javax.swing.JMenuItem("Reset Image View");
+        resetImageViewItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R, 0));
+        resetImageViewItem.addActionListener(e -> resetImage(null));
+        viewer2DMenu.add(resetImageViewItem);
+        
+        // Revert series
+        // HOROS-20240407準拠: MainMenu.xib 664行目
+        javax.swing.JMenuItem revertSeriesItem = new javax.swing.JMenuItem("Revert series");
+        revertSeriesItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        revertSeriesItem.addActionListener(e -> revertSeries(null));
+        viewer2DMenu.add(revertSeriesItem);
+        
+        // Scale サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 669行目
+        javax.swing.JMenu scaleMenu = new javax.swing.JMenu("Scale");
+        
+        javax.swing.JMenuItem noRescaleItem = new javax.swing.JMenuItem("No Rescale Size (100%)");
+        noRescaleItem.addActionListener(e -> actualSize(null));
+        scaleMenu.add(noRescaleItem);
+        
+        javax.swing.JMenuItem actualSizeItem = new javax.swing.JMenuItem("Actual Size");
+        actualSizeItem.addActionListener(e -> realSize(null));
+        scaleMenu.add(actualSizeItem);
+        
+        javax.swing.JMenuItem scaleToFitItem = new javax.swing.JMenuItem("Scale To Fit");
+        scaleToFitItem.addActionListener(e -> scaleToFit(null));
+        scaleMenu.add(scaleToFitItem);
+        
+        viewer2DMenu.add(scaleMenu);
+        
+        // Sort By サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 694行目
+        javax.swing.JMenu sortByMenu = new javax.swing.JMenu("Sort By");
+        
+        javax.swing.JMenuItem instanceAscItem = new javax.swing.JMenuItem("Instance Number - Ascending");
+        instanceAscItem.addActionListener(e -> sortSeriesByValue(null));
+        sortByMenu.add(instanceAscItem);
+        
+        javax.swing.JMenuItem instanceDescItem = new javax.swing.JMenuItem("Instance Number - Descending");
+        instanceDescItem.addActionListener(e -> sortSeriesByValue(null));
+        sortByMenu.add(instanceDescItem);
+        
+        sortByMenu.addSeparator();
+        
+        javax.swing.JMenuItem sliceLocAscItem = new javax.swing.JMenuItem("Slice Location - Ascending");
+        sliceLocAscItem.addActionListener(e -> sortSeriesByValue(null));
+        sortByMenu.add(sliceLocAscItem);
+        
+        javax.swing.JMenuItem sliceLocDescItem = new javax.swing.JMenuItem("Slice Location - Descending");
+        sliceLocDescItem.addActionListener(e -> sortSeriesByValue(null));
+        sortByMenu.add(sliceLocDescItem);
+        
+        viewer2DMenu.add(sortByMenu);
+        
+        // Orientation サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 726行目
+        javax.swing.JMenu orientationMenu = new javax.swing.JMenu("Orientation");
+        
+        javax.swing.JMenuItem flipHorizontalItem = new javax.swing.JMenuItem("Flip Image Horizontal");
+        flipHorizontalItem.addActionListener(e -> flipHorizontal(null));
+        orientationMenu.add(flipHorizontalItem);
+        
+        javax.swing.JMenuItem flipVerticalItem = new javax.swing.JMenuItem("Flip Image Vertical");
+        flipVerticalItem.addActionListener(e -> flipVertical(null));
+        orientationMenu.add(flipVerticalItem);
+        
+        orientationMenu.addSeparator();
+        
+        javax.swing.JMenuItem rotate0Item = new javax.swing.JMenuItem("Rotation 0 Degrees");
+        rotate0Item.addActionListener(e -> rotate0(null));
+        orientationMenu.add(rotate0Item);
+        
+        javax.swing.JMenuItem rotate90Item = new javax.swing.JMenuItem("Rotation 90 Degrees");
+        rotate90Item.addActionListener(e -> rotate90(null));
+        orientationMenu.add(rotate90Item);
+        
+        javax.swing.JMenuItem rotate180Item = new javax.swing.JMenuItem("Rotation 180 Degrees");
+        rotate180Item.addActionListener(e -> rotate180(null));
+        orientationMenu.add(rotate180Item);
+        
+        viewer2DMenu.add(orientationMenu);
+        
+        // Calibrate Resolution
+        // HOROS-20240407準拠: MainMenu.xib 760行目
+        javax.swing.JMenuItem calibrateItem = new javax.swing.JMenuItem("Calibrate Resolution");
+        calibrateItem.addActionListener(e -> calibrate(null));
+        viewer2DMenu.add(calibrateItem);
+        
+        // 3D Position Panel
+        // HOROS-20240407準拠: MainMenu.xib 765行目
+        javax.swing.JMenuItem threeDPanelItem = new javax.swing.JMenuItem("3D Position Panel");
+        threeDPanelItem.addActionListener(e -> threeDPanel(null));
+        viewer2DMenu.add(threeDPanelItem);
+        
+        // Navigator Panel
+        // HOROS-20240407準拠: MainMenu.xib 770行目
+        javax.swing.JMenuItem navigatorItem = new javax.swing.JMenuItem("Navigator Panel");
+        navigatorItem.addActionListener(e -> navigator(null));
+        viewer2DMenu.add(navigatorItem);
+        
+        // Flip Series
+        // HOROS-20240407準拠: MainMenu.xib 775行目
+        javax.swing.JMenuItem flipSeriesItem = new javax.swing.JMenuItem("Flip Series");
+        flipSeriesItem.addActionListener(e -> flipDataSeries(null));
+        viewer2DMenu.add(flipSeriesItem);
+        
+        // Use VOI LUT
+        // HOROS-20240407準拠: MainMenu.xib 780行目
+        javax.swing.JCheckBoxMenuItem useVOILUTItem = new javax.swing.JCheckBoxMenuItem("Use VOI LUT");
+        useVOILUTItem.setSelected(true);
+        useVOILUTItem.addActionListener(e -> useVOILUT(null));
+        viewer2DMenu.add(useVOILUTItem);
+        
+        // Display DICOM Overlays
+        // HOROS-20240407準拠: MainMenu.xib 785行目
+        javax.swing.JCheckBoxMenuItem displayOverlaysItem = new javax.swing.JCheckBoxMenuItem("Display DICOM Overlays");
+        displayOverlaysItem.setSelected(true);
+        displayOverlaysItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_O, java.awt.event.InputEvent.ALT_DOWN_MASK));
+        viewer2DMenu.add(displayOverlaysItem);
+        
+        // DICOM Meta-Data
+        // HOROS-20240407準拠: MainMenu.xib 795行目
+        javax.swing.JMenuItem dicomMetaDataItem = new javax.swing.JMenuItem("DICOM Meta-Data");
+        dicomMetaDataItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_I, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        dicomMetaDataItem.addActionListener(e -> viewXML(null));
+        viewer2DMenu.add(dicomMetaDataItem);
+        
+        // Convert from/to SUV
+        // HOROS-20240407準拠: MainMenu.xib 801行目
+        javax.swing.JMenuItem convertSUVItem = new javax.swing.JMenuItem("Convert from/to SUV");
+        convertSUVItem.addActionListener(e -> displaySUV(null));
+        viewer2DMenu.add(convertSUVItem);
+        
+        // Fuse/De-Fuse PET/SPECT - CT
+        // HOROS-20240407準拠: MainMenu.xib 807行目
+        javax.swing.JMenuItem fuseItem = new javax.swing.JMenuItem("Fuse/De-Fuse PET/SPECT - CT");
+        fuseItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F, 0));
+        fuseItem.addActionListener(e -> blendWindows(null));
+        viewer2DMenu.add(fuseItem);
+        
+        // Flatten Fused Image
+        // HOROS-20240407準拠: MainMenu.xib 812行目
+        javax.swing.JMenuItem flattenFusedItem = new javax.swing.JMenuItem("Flatten Fused Image");
+        flattenFusedItem.addActionListener(e -> mergeFusedImages(null));
+        viewer2DMenu.add(flattenFusedItem);
+        
+        viewer2DMenu.addSeparator();
+        
+        // Propagate Settings Between Series
+        // HOROS-20240407準拠: MainMenu.xib 821行目
+        javax.swing.JCheckBoxMenuItem propagateSettingsItem = new javax.swing.JCheckBoxMenuItem("Propagate Settings Between Series");
+        propagateSettingsItem.setSelected(true);
+        propagateSettingsItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_G, 0));
+        propagateSettingsItem.addActionListener(e -> copySettingsToOthers(null));
+        viewer2DMenu.add(propagateSettingsItem);
+        
+        // Don't Propagate WL&WW Between Series
+        // HOROS-20240407準拠: MainMenu.xib 831行目
+        javax.swing.JCheckBoxMenuItem dontPropagateWLWWItem = new javax.swing.JCheckBoxMenuItem("Don't Propagate WL&WW Between Series");
+        dontPropagateWLWWItem.setSelected(false);
+        dontPropagateWLWWItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_G, java.awt.event.InputEvent.ALT_DOWN_MASK));
+        viewer2DMenu.add(dontPropagateWLWWItem);
+        
+        // Propagate Settings in Current Series
+        // HOROS-20240407準拠: MainMenu.xib 838行目
+        javax.swing.JMenuItem propagateInSeriesItem = new javax.swing.JMenuItem("Propagate Settings in Current Series");
+        propagateInSeriesItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_G, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        propagateInSeriesItem.addActionListener(e -> switchCopySettingsInSeries(null));
+        viewer2DMenu.add(propagateInSeriesItem);
+        
+        // Sync Series (Same Study) サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 853行目
+        javax.swing.JMenu syncSeriesMenu = new javax.swing.JMenu("Sync Series (Same Study)");
+        
+        javax.swing.JMenuItem syncOffItem = new javax.swing.JMenuItem("Off");
+        syncOffItem.addActionListener(e -> syncronize(null));
+        syncSeriesMenu.add(syncOffItem);
+        
+        javax.swing.JMenuItem syncSlicePosItem = new javax.swing.JMenuItem("Slice Position - Absolute");
+        syncSlicePosItem.addActionListener(e -> syncronize(null));
+        syncSeriesMenu.add(syncSlicePosItem);
+        
+        syncSeriesMenu.addSeparator();
+        
+        javax.swing.JMenuItem syncSliceIDAbsItem = new javax.swing.JMenuItem("Slice ID - Absolute");
+        syncSliceIDAbsItem.addActionListener(e -> syncronize(null));
+        syncSeriesMenu.add(syncSliceIDAbsItem);
+        
+        javax.swing.JMenuItem syncSliceIDRatioItem = new javax.swing.JMenuItem("Slice ID - Absolute Ratio");
+        syncSliceIDRatioItem.addActionListener(e -> syncronize(null));
+        syncSeriesMenu.add(syncSliceIDRatioItem);
+        
+        javax.swing.JMenuItem syncSliceIDRelItem = new javax.swing.JMenuItem("Slice ID - Relative");
+        syncSliceIDRelItem.addActionListener(e -> syncronize(null));
+        syncSeriesMenu.add(syncSliceIDRelItem);
+        
+        syncSeriesMenu.addSeparator();
+        
+        javax.swing.JCheckBoxMenuItem limitSameStudyItem = new javax.swing.JCheckBoxMenuItem("Limit to Same Study");
+        limitSameStudyItem.addActionListener(e -> alwaysSyncMenu(null));
+        syncSeriesMenu.add(limitSameStudyItem);
+        
+        viewer2DMenu.add(syncSeriesMenu);
+        
+        // Sync Series (Different Studies) at Current Position
+        // HOROS-20240407準拠: MainMenu.xib 899行目
+        javax.swing.JMenuItem syncDifferentItem = new javax.swing.JMenuItem("Sync Series (Different Studies) at Current Position");
+        syncDifferentItem.addActionListener(e -> SyncSeries(null));
+        viewer2DMenu.add(syncDifferentItem);
+        
+        viewer2DMenu.addSeparator();
+        
+        // Key Image
+        // HOROS-20240407準拠: MainMenu.xib 907行目
+        javax.swing.JMenuItem keyImageItem = new javax.swing.JMenuItem("Key Image");
+        keyImageItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K, 0));
+        keyImageItem.addActionListener(e -> setKeyImage(null));
+        viewer2DMenu.add(keyImageItem);
+        
+        // Mark All Images as Key Images
+        // HOROS-20240407準拠: MainMenu.xib 912行目
+        javax.swing.JMenuItem markAllKeyItem = new javax.swing.JMenuItem("Mark All Images as Key Images");
+        markAllKeyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K, java.awt.event.InputEvent.ALT_DOWN_MASK));
+        markAllKeyItem.addActionListener(e -> setAllKeyImages(null));
+        viewer2DMenu.add(markAllKeyItem);
+        
+        // Unmark All Images as Key Images
+        // HOROS-20240407準拠: MainMenu.xib 918行目
+        javax.swing.JMenuItem unmarkAllKeyItem = new javax.swing.JMenuItem("Unmark All Images as Key Images");
+        unmarkAllKeyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        unmarkAllKeyItem.addActionListener(e -> setAllNonKeyImages(null));
+        viewer2DMenu.add(unmarkAllKeyItem);
+        
+        // Mark All ROIs Images as Key Images
+        // HOROS-20240407準拠: MainMenu.xib 924行目
+        javax.swing.JMenuItem markROIsKeyItem = new javax.swing.JMenuItem("Mark All ROIs Images as Key Images");
+        markROIsKeyItem.addActionListener(e -> setROIsImagesKeyImages(null));
+        viewer2DMenu.add(markROIsKeyItem);
+        
+        // Save as DICOM SC and mark as Key Image
+        // HOROS-20240407準拠: MainMenu.xib 930行目
+        javax.swing.JMenuItem saveDICOMSCItem = new javax.swing.JMenuItem("Save as DICOM SC and mark as Key Image");
+        saveDICOMSCItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K, java.awt.event.InputEvent.ALT_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        saveDICOMSCItem.addActionListener(e -> captureAndSetKeyImage(null));
+        viewer2DMenu.add(saveDICOMSCItem);
+        
+        // Find Next Key Image
+        // HOROS-20240407準拠: MainMenu.xib 936行目
+        javax.swing.JMenuItem findNextKeyItem = new javax.swing.JMenuItem("Find Next Key Image");
+        findNextKeyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K, java.awt.event.InputEvent.CTRL_DOWN_MASK));
+        findNextKeyItem.addActionListener(e -> findNextPreviousKeyImage(null));
+        viewer2DMenu.add(findNextKeyItem);
+        
+        // Find Previous Key Image
+        // HOROS-20240407準拠: MainMenu.xib 942行目
+        javax.swing.JMenuItem findPrevKeyItem = new javax.swing.JMenuItem("Find Previous Key Image");
+        findPrevKeyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K, java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        findPrevKeyItem.addActionListener(e -> findNextPreviousKeyImage(null));
+        viewer2DMenu.add(findPrevKeyItem);
+        
+        // 注: 2D Viewerメニューには他にも多くの項目がありますが、主要な項目のみ実装しています
+        // 残りの項目（Subtraction、Annotations、Window Width & Level、Color Look Up Table、Image Tiling、Windows Tiling、Save/Load Workspace Stateなど）は後で実装
+        
+        menuBar.add(viewer2DMenu);
+        
+        // ========== 3D Viewerメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 1371行目
+        javax.swing.JMenu viewer3DMenu = new javax.swing.JMenu("3D Viewer");
+        
+        // 3D MPR
+        // HOROS-20240407準拠: MainMenu.xib 1374行目
+        javax.swing.JMenuItem mprViewerItem = new javax.swing.JMenuItem("3D MPR");
+        mprViewerItem.addActionListener(e -> mprViewer(null));
+        viewer3DMenu.add(mprViewerItem);
+        
+        // 3D Curved-MPR
+        // HOROS-20240407準拠: MainMenu.xib 1379行目
+        javax.swing.JMenuItem cprViewerItem = new javax.swing.JMenuItem("3D Curved-MPR");
+        cprViewerItem.addActionListener(e -> cprViewer(null));
+        viewer3DMenu.add(cprViewerItem);
+        
+        // 2D Orthogonal MPR
+        // HOROS-20240407準拠: MainMenu.xib 1384行目
+        javax.swing.JMenuItem orthogonalMPRItem = new javax.swing.JMenuItem("2D Orthogonal MPR");
+        orthogonalMPRItem.addActionListener(e -> orthogonalMPRViewer(null));
+        viewer3DMenu.add(orthogonalMPRItem);
+        
+        viewer3DMenu.addSeparator();
+        
+        // 3D MIP
+        // HOROS-20240407準拠: MainMenu.xib 1392行目
+        javax.swing.JMenuItem mipViewerItem = new javax.swing.JMenuItem("3D MIP");
+        mipViewerItem.addActionListener(e -> VRViewer(null));
+        viewer3DMenu.add(mipViewerItem);
+        
+        // 3D Volume Rendering
+        // HOROS-20240407準拠: MainMenu.xib 1397行目
+        javax.swing.JMenuItem volumeRenderingItem = new javax.swing.JMenuItem("3D Volume Rendering");
+        volumeRenderingItem.addActionListener(e -> VRViewer(null));
+        viewer3DMenu.add(volumeRenderingItem);
+        
+        // 3D Surface Rendering
+        // HOROS-20240407準拠: MainMenu.xib 1402行目
+        javax.swing.JMenuItem surfaceRenderingItem = new javax.swing.JMenuItem("3D Surface Rendering");
+        surfaceRenderingItem.addActionListener(e -> SRViewer(null));
+        viewer3DMenu.add(surfaceRenderingItem);
+        
+        // 3D Endoscopy
+        // HOROS-20240407準拠: MainMenu.xib 1407行目
+        javax.swing.JMenuItem endoscopyItem = new javax.swing.JMenuItem("3D Endoscopy");
+        endoscopyItem.addActionListener(e -> endoscopyViewer(null));
+        viewer3DMenu.add(endoscopyItem);
+        
+        viewer3DMenu.addSeparator();
+        
+        // Reset to Initial View
+        // HOROS-20240407準拠: MainMenu.xib 1415行目
+        javax.swing.JMenuItem reset3DItem = new javax.swing.JMenuItem("Reset to Initial View");
+        reset3DItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R, 0));
+        reset3DItem.addActionListener(e -> resetImage(null));
+        viewer3DMenu.add(reset3DItem);
+        
+        // Revert Series
+        // HOROS-20240407準拠: MainMenu.xib 1420行目
+        javax.swing.JMenuItem revert3DItem = new javax.swing.JMenuItem("Revert Series");
+        revert3DItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        revert3DItem.addActionListener(e -> revertSeries(null));
+        viewer3DMenu.add(revert3DItem);
+        
+        // 注: 3D Viewerメニューには他にも多くの項目がありますが、主要な項目のみ実装しています
+        
+        menuBar.add(viewer3DMenu);
+        
+        // ========== ROIメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 1532行目
+        javax.swing.JMenu roiMenu = new javax.swing.JMenu("ROI");
+        
+        // Import ROI(s)...
+        // HOROS-20240407準拠: MainMenu.xib 1535行目
+        javax.swing.JMenuItem importROIItem = new javax.swing.JMenuItem("Import ROI(s)...");
+        importROIItem.addActionListener(e -> roiLoadFromFiles(null));
+        roiMenu.add(importROIItem);
+        
+        roiMenu.addSeparator();
+        
+        // Save Selected ROI(s)...
+        // HOROS-20240407準拠: MainMenu.xib 1543行目
+        javax.swing.JMenuItem saveSelectedROIItem = new javax.swing.JMenuItem("Save Selected ROI(s)...");
+        saveSelectedROIItem.addActionListener(e -> roiSaveSelected(null));
+        roiMenu.add(saveSelectedROIItem);
+        
+        // Save All ROIs of this Series...
+        // HOROS-20240407準拠: MainMenu.xib 1548行目
+        javax.swing.JMenuItem saveSeriesROIItem = new javax.swing.JMenuItem("Save All ROIs of this Series...");
+        saveSeriesROIItem.addActionListener(e -> roiSaveSeries(null));
+        roiMenu.add(saveSeriesROIItem);
+        
+        roiMenu.addSeparator();
+        
+        // Delete All ROIs in this Series
+        // HOROS-20240407準拠: MainMenu.xib 1556行目
+        javax.swing.JMenuItem deleteAllROIItem = new javax.swing.JMenuItem("Delete All ROIs in this Series");
+        deleteAllROIItem.addActionListener(e -> roiDeleteAll(null));
+        roiMenu.add(deleteAllROIItem);
+        
+        // Delete All ROIs with Same Name as Selected ROI
+        // HOROS-20240407準拠: MainMenu.xib 1564行目
+        javax.swing.JMenuItem deleteSameNameROIItem = new javax.swing.JMenuItem("Delete All ROIs with Same Name as Selected ROI");
+        deleteSameNameROIItem.addActionListener(e -> roiDeleteAllROIsWithSameName(null));
+        roiMenu.add(deleteSameNameROIItem);
+        
+        roiMenu.addSeparator();
+        
+        // Select All ROIs in this Series
+        // HOROS-20240407準拠: MainMenu.xib 1573行目
+        javax.swing.JMenuItem selectAllROIItem = new javax.swing.JMenuItem("Select All ROIs in this Series");
+        selectAllROIItem.addActionListener(e -> roiSelectDeselectAll(null));
+        roiMenu.add(selectAllROIItem);
+        
+        // Deselect All ROIs in this Series
+        // HOROS-20240407準拠: MainMenu.xib 1578行目
+        javax.swing.JMenuItem deselectAllROIItem = new javax.swing.JMenuItem("Deselect All ROIs in this Series");
+        deselectAllROIItem.addActionListener(e -> roiSelectDeselectAll(null));
+        roiMenu.add(deselectAllROIItem);
+        
+        roiMenu.addSeparator();
+        
+        // ROI Manager...
+        // HOROS-20240407準拠: MainMenu.xib 1586行目
+        javax.swing.JMenuItem roiManagerItem = new javax.swing.JMenuItem("ROI Manager...");
+        roiManagerItem.addActionListener(e -> roiGetManager(null));
+        roiMenu.add(roiManagerItem);
+        
+        // ROI Info...
+        // HOROS-20240407準拠: MainMenu.xib 1591行目
+        javax.swing.JMenuItem roiInfoItem = new javax.swing.JMenuItem("ROI Info...");
+        roiInfoItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_I, 0));
+        roiInfoItem.addActionListener(e -> roiGetInfo(null));
+        roiMenu.add(roiInfoItem);
+        
+        // ROI Rename...
+        // HOROS-20240407準拠: MainMenu.xib 1596行目
+        javax.swing.JMenuItem roiRenameItem = new javax.swing.JMenuItem("ROI Rename...");
+        roiRenameItem.addActionListener(e -> roiRename(null));
+        roiMenu.add(roiRenameItem);
+        
+        // Set Default ROI Name...
+        // HOROS-20240407準拠: MainMenu.xib 1601行目
+        javax.swing.JMenuItem roiDefaultsItem = new javax.swing.JMenuItem("Set Default ROI Name...");
+        roiDefaultsItem.addActionListener(e -> roiDefaults(null));
+        roiMenu.add(roiDefaultsItem);
+        
+        // 注: ROIメニューには他にも多くの項目がありますが、主要な項目のみ実装しています
+        
+        menuBar.add(roiMenu);
+        
+        // ========== Pluginsメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 1853行目
+        javax.swing.JMenu pluginsMenu = new javax.swing.JMenu("Plugins");
+        
+        // Image Filters サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 1856行目
+        javax.swing.JMenu imageFiltersMenu = new javax.swing.JMenu("Image Filters");
+        pluginsMenu.add(imageFiltersMenu);
+        
+        // ROI Tools サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 1859行目
+        javax.swing.JMenu roiToolsMenu = new javax.swing.JMenu("ROI Tools");
+        pluginsMenu.add(roiToolsMenu);
+        
+        // Others サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 1862行目
+        javax.swing.JMenu othersMenu = new javax.swing.JMenu("Others");
+        pluginsMenu.add(othersMenu);
+        
+        // Database サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 1865行目
+        javax.swing.JMenu databasePluginsMenu = new javax.swing.JMenu("Database");
+        pluginsMenu.add(databasePluginsMenu);
+        
+        pluginsMenu.addSeparator();
+        
+        // Plugins Manager...
+        // HOROS-20240407準拠: MainMenu.xib 1871行目
+        javax.swing.JMenuItem pluginsManagerItem = new javax.swing.JMenuItem("Plugins Manager...");
+        pluginsManagerItem.addActionListener(e -> showWindow(null));
+        pluginsMenu.add(pluginsManagerItem);
+        
+        menuBar.add(pluginsMenu);
+        
+        // ========== Recent Studiesメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 1879行目
+        javax.swing.JMenu recentStudiesMenu = new javax.swing.JMenu("Recent Studies");
+        // 注: Recent Studiesメニューは動的に更新されるため、初期状態では空
+        javax.swing.JMenuItem emptyItem = new javax.swing.JMenuItem("Empty");
+        emptyItem.setEnabled(false);
+        recentStudiesMenu.add(emptyItem);
+        
+        menuBar.add(recentStudiesMenu);
+        
+        // ========== Windowメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 1889行目
+        javax.swing.JMenu windowMenu = new javax.swing.JMenu("Window");
+        
+        // Minimize
+        // HOROS-20240407準拠: MainMenu.xib 1892行目
+        javax.swing.JMenuItem minimizeItem = new javax.swing.JMenuItem("Minimize");
+        minimizeItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_M, 0));
+        minimizeItem.addActionListener(e -> setState(java.awt.Frame.ICONIFIED));
+        windowMenu.add(minimizeItem);
+        
+        // Resize Window サブメニュー
+        // HOROS-20240407準拠: MainMenu.xib 1897行目
+        javax.swing.JMenu resizeWindowMenu = new javax.swing.JMenu("Resize Window");
+        String[] resizePercentages = {"25%", "50%", "100%", "200%", "300%", "iPod Video"};
+        for (int i = 0; i < resizePercentages.length; i++) {
+            javax.swing.JMenuItem resizeItem = new javax.swing.JMenuItem(resizePercentages[i]);
+            final int tag = i;
+            resizeItem.addActionListener(e -> {
+                // TODO: resizeWindow実装（tagを使用）
+            });
+            resizeWindowMenu.add(resizeItem);
+        }
+        windowMenu.add(resizeWindowMenu);
+        
+        // Tile 2D Viewer Windows
+        // HOROS-20240407準拠: MainMenu.xib 1933行目
+        javax.swing.JMenuItem tile2DItem = new javax.swing.JMenuItem("Tile 2D Viewer Windows");
+        tile2DItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_T, 0));
+        tile2DItem.addActionListener(e -> {
+            // TODO: tileWindows実装
+        });
+        windowMenu.add(tile2DItem);
+        
+        // Tile 3D Viewer Windows
+        // HOROS-20240407準拠: MainMenu.xib 1938行目
+        javax.swing.JMenuItem tile3DItem = new javax.swing.JMenuItem("Tile 3D Viewer Windows");
+        tile3DItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_T, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        tile3DItem.addActionListener(e -> {
+            // TODO: tile3DWindows実装
+        });
+        windowMenu.add(tile3DItem);
+        
+        // Close All Viewers
+        // HOROS-20240407準拠: MainMenu.xib 1943行目
+        javax.swing.JMenuItem closeAllViewersItem = new javax.swing.JMenuItem("Close All Viewers");
+        closeAllViewersItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_W, java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+        closeAllViewersItem.addActionListener(e -> {
+            // TODO: closeAllViewers実装
+        });
+        windowMenu.add(closeAllViewersItem);
+        
+        windowMenu.addSeparator();
+        
+        // Bring All to Front
+        // HOROS-20240407準拠: MainMenu.xib 1949行目
+        javax.swing.JMenuItem bringAllToFrontItem = new javax.swing.JMenuItem("Bring All to Front");
+        bringAllToFrontItem.addActionListener(e -> {
+            // TODO: arrangeInFront実装
+        });
+        windowMenu.add(bringAllToFrontItem);
+        
+        menuBar.add(windowMenu);
+        
+        setJMenuBar(menuBar);
+    }
+    
+    // ========== メニューアクションメソッド（HOROS-20240407準拠） ==========
+    // 既に実装されているメソッドはそのまま使用、未実装のものは空実装（TODOコメント付き）
+    
+    /**
+     * ドロワーをトグル
+     * HOROS-20240407準拠: - (IBAction)drawerToggle: (id) sender (10611行目)
+     */
+    public void drawerToggle(Object sender) {
+        // TODO: ドロワーの表示/非表示を切り替え
+    }
+    
+    /**
+     * 比較スタディドロワーをトグル
+     * HOROS-20240407準拠: - (IBAction)comparativeToggle:(id)sender (10591行目)
+     */
+    public void comparativeToggle(Object sender) {
+        // TODO: 比較スタディドロワーの表示/非表示を切り替え
+    }
+    
+    /**
+     * データベースフォルダを作成
+     * HOROS-20240407準拠: - (IBAction) createDatabaseFolder:(id) sender (1860行目)
+     */
+    public void createDatabaseFolder(Object sender) {
+        // TODO: データベースフォルダ作成ダイアログ
+    }
+    
+    /**
+     * データベースを開く
+     * HOROS-20240407準拠: -(IBAction)openDatabase:(id)sender (1843行目)
+     */
+    public void openDatabase(Object sender) {
+        // TODO: データベースフォルダ選択ダイアログ
+    }
+    
+    /**
+     * アルバムを保存
+     * HOROS-20240407準拠: - (IBAction) saveAlbums:(id) sender (10811行目)
+     */
+    public void saveAlbums(Object sender) {
+        // TODO: アルバム保存ダイアログ
+    }
+    
+    /**
+     * アルバムを追加（インポート）
+     * HOROS-20240407準拠: - (IBAction) addAlbums:(id) sender (10834行目)
+     */
+    public void addAlbums(Object sender) {
+        // TODO: アルバムインポートダイアログ
+    }
+    
+    /**
+     * レポートを生成
+     * HOROS-20240407準拠: - (IBAction) generateReport: (id)sender (18655行目)
+     */
+    public void generateReport(Object sender) {
+        // TODO: レポート生成実装
+    }
+    
+    /**
+     * レポートを削除
+     * HOROS-20240407準拠: - (IBAction)deleteReport: (id)sender (18583行目)
+     */
+    public void deleteReport(Object sender) {
+        // TODO: レポート削除実装
+    }
+    
+    /**
+     * レポートをPDFに変換
+     * HOROS-20240407準拠: - (IBAction) convertReportToPDF: (id)sender (18542行目)
+     */
+    public void convertReportToPDF(Object sender) {
+        // TODO: レポートPDF変換実装
+    }
+    
+    /**
+     * レポートをDICOM SRに変換
+     * HOROS-20240407準拠: - (IBAction) convertReportToDICOMSR: (id)sender (18494行目)
+     */
+    public void convertReportToDICOMSR(Object sender) {
+        // TODO: レポートDICOM SR変換実装
+    }
+    
+    /**
+     * Rawデータをインポート
+     * HOROS-20240407準拠: - (IBAction)importRawData:(id)sender (18186行目)
+     */
+    public void importRawData(Object sender) {
+        // TODO: Rawデータインポート実装
+    }
+    
+    /**
+     * メールを送信
+     * HOROS-20240407準拠: -(IBAction)sendMail:(id)sender (16940行目)
+     */
+    public void sendMail(Object sender) {
+        // TODO: メール送信実装
+    }
+    
+    /**
+     * データベースリストを保存
+     * HOROS-20240407準拠: - (IBAction) saveDBListAs:(id) sender (8825行目)
+     */
+    public void saveDBListAs(Object sender) {
+        // TODO: データベースリスト保存実装
+    }
+    
+    /**
+     * DICOMを匿名化
+     * HOROS-20240407準拠: - (IBAction)anonymizeDICOM:(id)sender (17978行目)
+     */
+    public void anonymizeDICOM(Object sender) {
+        // TODO: DICOM匿名化実装
+    }
+    
+    /**
+     * データベースフォルダにコピー
+     * HOROS-20240407準拠: - (IBAction) copyToDBFolder: (id) sender (2110行目)
+     */
+    public void copyToDBFolder(Object sender) {
+        // TODO: データベースフォルダにコピー実装
+    }
+    
+    /**
+     * 検索フィールド
+     * HOROS-20240407準拠: - (IBAction) searchField: (id)sender (13752行目)
+     */
+    public void searchField(Object sender) {
+        if (searchField != null) {
+            searchField.requestFocus();
+        }
+    }
+    
+    /**
+     * スタディをマージ
+     * HOROS-20240407準拠: - (IBAction) mergeStudies:(id) sender (5501行目)
+     */
+    public void mergeStudies(Object sender) {
+        // TODO: スタディマージ実装
+    }
+    
+    /**
+     * アイテムを削除
+     * HOROS-20240407準拠: - (IBAction)delItem: (id)sender (5999行目)
+     */
+    public void delItem(Object sender) {
+        // TODO: アイテム削除実装
+    }
+    
+    /**
+     * XMLを表示
+     * HOROS-20240407準拠: - (IBAction) viewXML:(id) sender (18391行目)
+     */
+    public void viewXML(Object sender) {
+        // TODO: XML表示実装
+    }
+    
+    /**
+     * ファイルを圧縮
+     * HOROS-20240407準拠: - (IBAction) compressSelectedFiles: (id)sender (15952行目)
+     */
+    public void compressSelectedFiles(Object sender) {
+        // TODO: ファイル圧縮実装
+    }
+    
+    /**
+     * ファイルを展開
+     * HOROS-20240407準拠: - (IBAction)decompressSelectedFiles: (id)sender (15982行目)
+     */
+    public void decompressSelectedFiles(Object sender) {
+        // TODO: ファイル展開実装
+    }
+    
+    /**
+     * データベースを再構築
+     * HOROS-20240407準拠: - (IBAction) ReBuildDatabaseSheet: (id)sender (2459行目)
+     */
+    public void ReBuildDatabaseSheet(Object sender) {
+        // TODO: データベース再構築シート表示
+    }
+    
+    /**
+     * サムネイルを再構築
+     * HOROS-20240407準拠: - (IBAction)rebuildThumbnails:(id)sender (9985行目)
+     */
+    public void rebuildThumbnails(Object sender) {
+        // TODO: サムネイル再構築実装
+    }
+    
+    /**
+     * 選択スタディをクエリ
+     * HOROS-20240407準拠: - (IBAction)querySelectedStudy: (id)sender (18120行目)
+     */
+    public void querySelectedStudy(Object sender) {
+        // TODO: 選択スタディクエリ実装
+    }
+    
+    /**
+     * PACS On-Demandスタディを取得
+     * HOROS-20240407準拠: -(IBAction)retrieveSelectedPODStudies:(id) sender (9955行目)
+     */
+    public void retrieveSelectedPODStudies(Object sender) {
+        // TODO: PACS On-Demandスタディ取得実装
+    }
+    
+    /**
+     * PACS On-Demand結果を更新
+     * HOROS-20240407準拠: - (IBAction) refreshPACSOnDemandResults:(id) sender (4721行目)
+     */
+    public void refreshPACSOnDemandResults(Object sender) {
+        // TODO: PACS On-Demand結果更新実装
+    }
+    
+    /**
+     * ログウィンドウを表示
+     * HOROS-20240407準拠: - (IBAction)showLogWindow: (id)sender (20372行目)
+     */
+    public void showLogWindow(Object sender) {
+        // TODO: ログウィンドウ表示実装
+    }
+    
+    /**
+     * コピー
+     * HOROS-20240407準拠: - (IBAction) copy: (id)sender (8809行目)
+     */
+    public void copy(Object sender) {
+        // TODO: コピー実装
+    }
+    
+    /**
+     * ペースト
+     * HOROS-20240407準拠: - (IBAction) paste: (id)sender (8802行目)
+     */
+    public void paste(Object sender) {
+        // TODO: ペースト実装
+    }
+    
+    // ========== 2D Viewerメニューアクションメソッド ==========
+    
+    /**
+     * シリーズを読み込み
+     * HOROS-20240407準拠: - (IBAction) loadSerie: (id) sender
+     */
+    public void loadSerie(Object sender) {
+        // TODO: シリーズ読み込み実装
+    }
+    
+    /**
+     * 患者を読み込み
+     * HOROS-20240407準拠: - (IBAction) loadPatient: (id) sender
+     */
+    public void loadPatient(Object sender) {
+        // TODO: 患者読み込み実装
+    }
+    
+    /**
+     * BW変換メニュー
+     * HOROS-20240407準拠: - (IBAction) ConvertToBWMenu: (id) sender
+     */
+    public void ConvertToBWMenu(Object sender) {
+        // TODO: BW変換実装
+    }
+    
+    /**
+     * RGB変換メニュー
+     * HOROS-20240407準拠: - (IBAction) ConvertToRGBMenu: (id) sender
+     */
+    public void ConvertToRGBMenu(Object sender) {
+        // TODO: RGB変換実装
+    }
+    
+    /**
+     * 画像をリセット
+     * HOROS-20240407準拠: - (IBAction) resetImage: (id) sender
+     */
+    public void resetImage(Object sender) {
+        // TODO: 画像リセット実装
+    }
+    
+    /**
+     * シリーズを元に戻す
+     * HOROS-20240407準拠: - (IBAction) revertSeries: (id) sender
+     */
+    public void revertSeries(Object sender) {
+        // TODO: シリーズ元に戻す実装
+    }
+    
+    /**
+     * 実際のサイズ
+     * HOROS-20240407準拠: - (IBAction) actualSize: (id) sender
+     */
+    public void actualSize(Object sender) {
+        // TODO: 実際のサイズ実装
+    }
+    
+    /**
+     * 実サイズ
+     * HOROS-20240407準拠: - (IBAction) realSize: (id) sender
+     */
+    public void realSize(Object sender) {
+        // TODO: 実サイズ実装
+    }
+    
+    /**
+     * フィットにスケール
+     * HOROS-20240407準拠: - (IBAction) scaleToFit: (id) sender
+     */
+    public void scaleToFit(Object sender) {
+        // TODO: フィットにスケール実装
+    }
+    
+    /**
+     * シリーズをソート
+     * HOROS-20240407準拠: - (IBAction) sortSeriesByValue: (id) sender
+     */
+    public void sortSeriesByValue(Object sender) {
+        // TODO: シリーズソート実装
+    }
+    
+    /**
+     * 水平反転
+     * HOROS-20240407準拠: - (IBAction) flipHorizontal: (id) sender
+     */
+    public void flipHorizontal(Object sender) {
+        // TODO: 水平反転実装
+    }
+    
+    /**
+     * 垂直反転
+     * HOROS-20240407準拠: - (IBAction) flipVertical: (id) sender
+     */
+    public void flipVertical(Object sender) {
+        // TODO: 垂直反転実装
+    }
+    
+    /**
+     * 0度回転
+     * HOROS-20240407準拠: - (IBAction) rotate0: (id) sender
+     */
+    public void rotate0(Object sender) {
+        // TODO: 0度回転実装
+    }
+    
+    /**
+     * 90度回転
+     * HOROS-20240407準拠: - (IBAction) rotate90: (id) sender
+     */
+    public void rotate90(Object sender) {
+        // TODO: 90度回転実装
+    }
+    
+    /**
+     * 180度回転
+     * HOROS-20240407準拠: - (IBAction) rotate180: (id) sender
+     */
+    public void rotate180(Object sender) {
+        // TODO: 180度回転実装
+    }
+    
+    /**
+     * キャリブレート
+     * HOROS-20240407準拠: - (IBAction) calibrate: (id) sender
+     */
+    public void calibrate(Object sender) {
+        // TODO: キャリブレート実装
+    }
+    
+    /**
+     * 3Dパネル
+     * HOROS-20240407準拠: - (IBAction) threeDPanel: (id) sender
+     */
+    public void threeDPanel(Object sender) {
+        // TODO: 3Dパネル実装
+    }
+    
+    /**
+     * ナビゲータ
+     * HOROS-20240407準拠: - (IBAction) navigator: (id) sender
+     */
+    public void navigator(Object sender) {
+        // TODO: ナビゲータ実装
+    }
+    
+    /**
+     * データシリーズを反転
+     * HOROS-20240407準拠: - (IBAction) flipDataSeries: (id) sender
+     */
+    public void flipDataSeries(Object sender) {
+        // TODO: データシリーズ反転実装
+    }
+    
+    /**
+     * VOI LUTを使用
+     * HOROS-20240407準拠: - (IBAction) useVOILUT: (id) sender
+     */
+    public void useVOILUT(Object sender) {
+        // TODO: VOI LUT使用実装
+    }
+    
+    /**
+     * SUVを表示
+     * HOROS-20240407準拠: - (IBAction) displaySUV: (id) sender
+     */
+    public void displaySUV(Object sender) {
+        // TODO: SUV表示実装
+    }
+    
+    /**
+     * ウィンドウをブレンド
+     * HOROS-20240407準拠: - (IBAction) blendWindows: (id) sender
+     */
+    public void blendWindows(Object sender) {
+        // TODO: ウィンドウブレンド実装
+    }
+    
+    /**
+     * 融合画像をマージ
+     * HOROS-20240407準拠: - (IBAction) mergeFusedImages: (id) sender
+     */
+    public void mergeFusedImages(Object sender) {
+        // TODO: 融合画像マージ実装
+    }
+    
+    /**
+     * 設定を他にコピー
+     * HOROS-20240407準拠: - (IBAction) copySettingsToOthers: (id) sender
+     */
+    public void copySettingsToOthers(Object sender) {
+        // TODO: 設定コピー実装
+    }
+    
+    /**
+     * シリーズ内で設定を切り替え
+     * HOROS-20240407準拠: - (IBAction) switchCopySettingsInSeries: (id) sender
+     */
+    public void switchCopySettingsInSeries(Object sender) {
+        // TODO: シリーズ内設定切り替え実装
+    }
+    
+    /**
+     * 同期
+     * HOROS-20240407準拠: - (IBAction) syncronize: (id) sender
+     */
+    public void syncronize(Object sender) {
+        // TODO: 同期実装
+    }
+    
+    /**
+     * 常に同期メニュー
+     * HOROS-20240407準拠: - (IBAction) alwaysSyncMenu: (id) sender
+     */
+    public void alwaysSyncMenu(Object sender) {
+        // TODO: 常に同期メニュー実装
+    }
+    
+    /**
+     * シリーズを同期
+     * HOROS-20240407準拠: - (IBAction) SyncSeries: (id) sender
+     */
+    public void SyncSeries(Object sender) {
+        // TODO: シリーズ同期実装
+    }
+    
+    /**
+     * キー画像を設定
+     * HOROS-20240407準拠: - (IBAction) setKeyImage: (id) sender
+     */
+    public void setKeyImage(Object sender) {
+        // TODO: キー画像設定実装
+    }
+    
+    /**
+     * 全ての画像をキー画像に設定
+     * HOROS-20240407準拠: - (IBAction) setAllKeyImages: (id) sender
+     */
+    public void setAllKeyImages(Object sender) {
+        // TODO: 全ての画像をキー画像に設定実装
+    }
+    
+    /**
+     * 全ての画像を非キー画像に設定
+     * HOROS-20240407準拠: - (IBAction) setAllNonKeyImages: (id) sender
+     */
+    public void setAllNonKeyImages(Object sender) {
+        // TODO: 全ての画像を非キー画像に設定実装
+    }
+    
+    /**
+     * ROI画像をキー画像に設定
+     * HOROS-20240407準拠: - (IBAction) setROIsImagesKeyImages: (id) sender
+     */
+    public void setROIsImagesKeyImages(Object sender) {
+        // TODO: ROI画像をキー画像に設定実装
+    }
+    
+    /**
+     * キャプチャしてキー画像に設定
+     * HOROS-20240407準拠: - (IBAction) captureAndSetKeyImage: (id) sender
+     */
+    public void captureAndSetKeyImage(Object sender) {
+        // TODO: キャプチャしてキー画像に設定実装
+    }
+    
+    /**
+     * 次の/前のキー画像を検索
+     * HOROS-20240407準拠: - (IBAction) findNextPreviousKeyImage: (id) sender
+     */
+    public void findNextPreviousKeyImage(Object sender) {
+        // TODO: 次の/前のキー画像検索実装
+    }
+    
+    // ========== 3D Viewerメニューアクションメソッド ==========
+    
+    /**
+     * MPRビューア
+     * HOROS-20240407準拠: - (IBAction) mprViewer: (id) sender
+     */
+    public void mprViewer(Object sender) {
+        // TODO: MPRビューア実装
+    }
+    
+    /**
+     * CPRビューア
+     * HOROS-20240407準拠: - (IBAction) cprViewer: (id) sender
+     */
+    public void cprViewer(Object sender) {
+        // TODO: CPRビューア実装
+    }
+    
+    /**
+     * 直交MPRビューア
+     * HOROS-20240407準拠: - (IBAction) orthogonalMPRViewer: (id) sender
+     */
+    public void orthogonalMPRViewer(Object sender) {
+        // TODO: 直交MPRビューア実装
+    }
+    
+    /**
+     * VRビューア
+     * HOROS-20240407準拠: - (IBAction) VRViewer: (id) sender
+     */
+    public void VRViewer(Object sender) {
+        // TODO: VRビューア実装
+    }
+    
+    /**
+     * SRビューア
+     * HOROS-20240407準拠: - (IBAction) SRViewer: (id) sender
+     */
+    public void SRViewer(Object sender) {
+        // TODO: SRビューア実装
+    }
+    
+    /**
+     * 内視鏡ビューア
+     * HOROS-20240407準拠: - (IBAction) endoscopyViewer: (id) sender
+     */
+    public void endoscopyViewer(Object sender) {
+        // TODO: 内視鏡ビューア実装
+    }
+    
+    // ========== ROIメニューアクションメソッド ==========
+    
+    /**
+     * ROIをファイルから読み込み
+     * HOROS-20240407準拠: - (IBAction) roiLoadFromFiles: (id) sender
+     */
+    public void roiLoadFromFiles(Object sender) {
+        // TODO: ROIファイル読み込み実装
+    }
+    
+    /**
+     * 選択されたROIを保存
+     * HOROS-20240407準拠: - (IBAction) roiSaveSelected: (id) sender
+     */
+    public void roiSaveSelected(Object sender) {
+        // TODO: 選択ROI保存実装
+    }
+    
+    /**
+     * シリーズのROIを保存
+     * HOROS-20240407準拠: - (IBAction) roiSaveSeries: (id) sender
+     */
+    public void roiSaveSeries(Object sender) {
+        // TODO: シリーズROI保存実装
+    }
+    
+    /**
+     * 全てのROIを削除
+     * HOROS-20240407準拠: - (IBAction) roiDeleteAll: (id) sender
+     */
+    public void roiDeleteAll(Object sender) {
+        // TODO: 全てのROI削除実装
+    }
+    
+    /**
+     * 同じ名前のROIを削除
+     * HOROS-20240407準拠: - (IBAction) roiDeleteAllROIsWithSameName: (id) sender
+     */
+    public void roiDeleteAllROIsWithSameName(Object sender) {
+        // TODO: 同じ名前のROI削除実装
+    }
+    
+    /**
+     * ROIを選択/選択解除
+     * HOROS-20240407準拠: - (IBAction) roiSelectDeselectAll: (id) sender
+     */
+    public void roiSelectDeselectAll(Object sender) {
+        // TODO: ROI選択/選択解除実装
+    }
+    
+    /**
+     * ROIマネージャーを取得
+     * HOROS-20240407準拠: - (IBAction) roiGetManager: (id) sender
+     */
+    public void roiGetManager(Object sender) {
+        // TODO: ROIマネージャー取得実装
+    }
+    
+    /**
+     * ROI情報を取得
+     * HOROS-20240407準拠: - (IBAction) roiGetInfo: (id) sender
+     */
+    public void roiGetInfo(Object sender) {
+        // TODO: ROI情報取得実装
+    }
+    
+    /**
+     * ROIをリネーム
+     * HOROS-20240407準拠: - (IBAction) roiRename: (id) sender
+     */
+    public void roiRename(Object sender) {
+        // TODO: ROIリネーム実装
+    }
+    
+    /**
+     * ROIデフォルト
+     * HOROS-20240407準拠: - (IBAction) roiDefaults: (id) sender
+     */
+    public void roiDefaults(Object sender) {
+        // TODO: ROIデフォルト実装
+    }
+    
+    /**
+     * ウィンドウを表示
+     * HOROS-20240407準拠: - (IBAction) showWindow: (id) sender
+     */
+    public void showWindow(Object sender) {
+        // TODO: ウィンドウ表示実装
     }
 }

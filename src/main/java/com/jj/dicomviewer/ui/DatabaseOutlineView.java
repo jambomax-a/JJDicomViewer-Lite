@@ -243,6 +243,117 @@ public class DatabaseOutlineView extends JXTreeTable {
         
         // 列ヘッダークリックリスナーを追加（ソート機能）
         addColumnHeaderClickListener();
+        
+        // HOROS-20240407準拠: ソートインジケーター表示用のカスタムヘッダーレンダラーを設定
+        setCustomHeaderRenderer();
+        
+        // HOROS-20240407準拠: 列幅を設定（リサイズ可能にする）
+        // 列が作成された後に呼び出す必要があるため、SwingUtilities.invokeLaterを使用
+        SwingUtilities.invokeLater(() -> {
+            applyColumnWidths();
+            // HOROS-20240407準拠: 初期化時はソートインジケーターを表示しない（ソートしていない状態）
+            // ソートインジケーターは、ユーザーが列ヘッダーをクリックしてソートした時のみ表示される
+        });
+    }
+    
+    // HOROS-20240407準拠: ソート状態を保持
+    private String currentSortColumn = null;
+    private boolean currentSortAscending = true;
+    
+    /**
+     * カスタムヘッダーレンダラーを設定（ソートインジケーター表示用）
+     * HOROS-20240407準拠: NSOutlineViewのsetIndicatorImage:inTableColumn:相当
+     */
+    private void setCustomHeaderRenderer() {
+        // デフォルトヘッダーレンダラーを設定
+        javax.swing.table.JTableHeader header = getTableHeader();
+        if (header != null) {
+            header.setDefaultRenderer(new SortableHeaderRenderer());
+        }
+    }
+    
+    /**
+     * ソートインジケーターを更新
+     * HOROS-20240407準拠: setIndicatorImage:inTableColumn:相当
+     * 
+     * @param sortColumn ソート列の識別子
+     * @param ascending 昇順の場合true
+     */
+    public void updateSortIndicator(String sortColumn, boolean ascending) {
+        currentSortColumn = sortColumn;
+        currentSortAscending = ascending;
+        
+        javax.swing.table.TableColumnModel columnModel = getColumnModel();
+        javax.swing.table.JTableHeader header = getTableHeader();
+        
+        if (columnModel == null || header == null) {
+            return;
+        }
+        
+        // すべての列のヘッダーレンダラーを更新
+        for (int i = 0; i < columnModel.getColumnCount(); i++) {
+            javax.swing.table.TableColumn column = columnModel.getColumn(i);
+            // 各列にソート状態を保持したヘッダーレンダラーを設定
+            column.setHeaderRenderer(new SortableHeaderRenderer());
+        }
+        
+        header.repaint();
+    }
+    
+    /**
+     * ソート可能なヘッダーレンダラー
+     * HOROS-20240407準拠: NSOutlineViewのソートインジケーター表示を再現
+     */
+    private class SortableHeaderRenderer implements javax.swing.table.TableCellRenderer {
+        
+        @Override
+        public java.awt.Component getTableCellRendererComponent(
+                javax.swing.JTable table, Object value,
+                boolean isSelected, boolean hasFocus,
+                int row, int column) {
+            
+            // 列の識別子を取得
+            javax.swing.table.TableColumn tableColumn = table.getColumnModel().getColumn(column);
+            Object identifier = tableColumn.getIdentifier();
+            String columnId = (identifier != null) ? identifier.toString() : null;
+            
+            // ソート列かどうかを判定
+            boolean isSortColumn = (currentSortColumn != null && columnId != null && 
+                                   currentSortColumn.equals(columnId));
+            
+            // ヘッダーパネルを作成（テキスト左寄せ、インジケーター右寄せ）
+            javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout());
+            panel.setOpaque(true);
+            panel.setBackground(table.getTableHeader().getBackground());
+            panel.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createEtchedBorder(),
+                javax.swing.BorderFactory.createEmptyBorder(2, 5, 2, 5)
+            ));
+            
+            // ヘッダーテキスト（左寄せ）
+            javax.swing.JLabel textLabel = new javax.swing.JLabel();
+            textLabel.setText(value != null ? value.toString() : "");
+            textLabel.setForeground(table.getTableHeader().getForeground());
+            textLabel.setFont(table.getTableHeader().getFont());
+            textLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+            panel.add(textLabel, java.awt.BorderLayout.WEST);
+            
+            // ソートインジケーター（右寄せ）
+            // HOROS-20240407準拠: NSOutlineViewの標準ソートインジケーター（アクセント記号）
+            if (isSortColumn) {
+                javax.swing.JLabel indicatorLabel = new javax.swing.JLabel();
+                // HOROS-20240407準拠: 昇順: ˄ (U+02C4 MODIFIER LETTER UP ARROWHEAD)
+                // HOROS-20240407準拠: 降順: ˅ (U+02C5 MODIFIER LETTER DOWN ARROWHEAD)
+                String indicator = currentSortAscending ? "\u02C4" : "\u02C5";
+                indicatorLabel.setText(indicator);
+                indicatorLabel.setForeground(table.getTableHeader().getForeground());
+                indicatorLabel.setFont(table.getTableHeader().getFont());
+                indicatorLabel.setHorizontalAlignment(javax.swing.SwingConstants.RIGHT);
+                panel.add(indicatorLabel, java.awt.BorderLayout.EAST);
+            }
+            
+            return panel;
+        }
     }
     
     /**
@@ -373,12 +484,33 @@ public class DatabaseOutlineView extends JXTreeTable {
         
         // 各列の幅を設定（リサイズ可能）
         javax.swing.table.TableColumnModel columnModel = getColumnModel();
+        
+        // HOROS-20240407準拠: 列が作成されていない場合は、列を作成
+        if (columnModel.getColumnCount() == 0) {
+            // JXTreeTableでは列が自動的に作成されるが、明示的に列を作成する必要がある場合がある
+            // ここでは列が既に作成されていることを前提とする
+            return;
+        }
+        
+        // HOROS-20240407準拠: 各列に識別子と幅を設定
         for (int i = 0; i < COLUMN_WIDTHS.length && i < columnModel.getColumnCount(); i++) {
             javax.swing.table.TableColumn column = columnModel.getColumn(i);
+            
+            // HOROS-20240407準拠: 列の識別子を設定（カラム状態の保存/復元に使用）
+            if (i < COLUMN_IDENTIFIERS.length) {
+                column.setIdentifier(COLUMN_IDENTIFIERS[i]);
+            }
+            
+            // HOROS-20240407準拠: 列のヘッダー名を設定
+            if (i < COLUMN_NAMES.length) {
+                column.setHeaderValue(COLUMN_NAMES[i]);
+            }
+            
+            // HOROS-20240407準拠: 列幅を設定（リサイズ可能）
             column.setMinWidth(COLUMN_MIN_WIDTHS[i]);
             column.setMaxWidth(COLUMN_MAX_WIDTHS[i]);
             column.setPreferredWidth(COLUMN_WIDTHS[i]);
-            column.setResizable(true);
+            column.setResizable(true); // ユーザーが列幅を調整できるようにする
         }
         
         revalidate();
@@ -483,6 +615,40 @@ public class DatabaseOutlineView extends JXTreeTable {
         // Swingではカラムの表示/非表示は直接制御できないため、
         // ここでは何もしない（幅の復元のみを行う）
         // 必要に応じて、カラムモデルから削除するなどの方法を検討
+    }
+    
+    /**
+     * 列が表示されているかどうかを確認
+     * HOROS-20240407準拠: MyOutlineView.m 134-138行目 - (BOOL)isColumnWithIdentifierVisible:(id)identifier
+     * HOROS-20240407準拠: NSTableColumn* column = [self tableColumnWithIdentifier:identifier]; return column && !column.isHidden;
+     * 
+     * @param identifier 列の識別子
+     * @return 列が存在し、表示されている場合true
+     */
+    public boolean isColumnWithIdentifierVisible(String identifier) {
+        if (identifier == null) {
+            return false;
+        }
+        
+        javax.swing.table.TableColumnModel columnModel = getColumnModel();
+        if (columnModel == null) {
+            return false;
+        }
+        
+        // HOROS-20240407準拠: 識別子で列を検索
+        for (int i = 0; i < columnModel.getColumnCount(); i++) {
+            javax.swing.table.TableColumn column = columnModel.getColumn(i);
+            Object colIdentifier = column.getIdentifier();
+            
+            if (identifier.equals(colIdentifier != null ? colIdentifier.toString() : "")) {
+                // HOROS-20240407準拠: 列が存在し、非表示でない場合にtrueを返す
+                // Swingでは列の表示/非表示は直接制御できないため、列が存在する場合はtrueを返す
+                // 列幅が0の場合は非表示とみなす
+                return column.getWidth() > 0;
+            }
+        }
+        
+        return false;
     }
     
     /**
