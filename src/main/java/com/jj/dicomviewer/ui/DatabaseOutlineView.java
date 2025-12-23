@@ -241,7 +241,9 @@ public class DatabaseOutlineView extends JXTreeTable {
         // ダブルクリックリスナーを追加
         addDoubleClickListener();
         
-        // 列ヘッダークリックリスナーを追加（ソート機能）
+        // HOROS-20240407準拠: NSOutlineViewが自動的にヘッダークリックを処理し、outlineView:sortDescriptorsDidChange:で検知（6665行目）
+        // Java Swingでは、JXTreeTableが自動的にヘッダークリックを処理する機能を持っていないため、
+        // 手動でリスナーを追加する必要がある（Java/WindowsとObjective-C/macOSの違いを埋めるための最小限のカスタムロジック）
         addColumnHeaderClickListener();
         
         // HOROS-20240407準拠: ソートインジケーター表示用のカスタムヘッダーレンダラーを設定
@@ -397,23 +399,38 @@ public class DatabaseOutlineView extends JXTreeTable {
     }
     
     /**
-     * 列ヘッダークリックリスナーを追加（ソート機能）
-     * HOROS-20240407準拠: 列ヘッダークリックでソート
+     * 列ヘッダークリックリスナーを追加
+     * HOROS-20240407準拠: NSOutlineViewが自動的にヘッダークリックを処理し、outlineView:sortDescriptorsDidChange:で検知（6665行目）
+     * Java Swingでは、JXTreeTableが自動的にヘッダークリックを処理する機能を持っていないため、
+     * 手動でリスナーを追加する必要がある（Java/WindowsとObjective-C/macOSの違いを埋めるための最小限のカスタムロジック）
      */
     private void addColumnHeaderClickListener() {
         javax.swing.table.JTableHeader header = getTableHeader();
-        if (header != null) {
-            header.addMouseListener(new java.awt.event.MouseAdapter() {
-                @Override
-                public void mouseClicked(java.awt.event.MouseEvent e) {
+        if (header == null) {
+            return;
+        }
+        
+        // HOROS-20240407準拠: 列ヘッダークリックでソート（outlineView:sortDescriptorsDidChange:相当）
+        header.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // HOROS-20240407準拠: 右クリックの場合は処理をスキップ（列メニューを表示するため）
+                if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
+                    return;
+                }
+                
+                // HOROS-20240407準拠: 左クリックの場合のみソート処理を実行
+                if (browserController != null) {
                     int columnIndex = header.columnAtPoint(e.getPoint());
-                    if (columnIndex >= 0 && columnIndex < COLUMN_IDENTIFIERS.length) {
-                        String columnId = COLUMN_IDENTIFIERS[columnIndex];
+                    if (columnIndex >= 0) {
+                        // 列の識別子を取得
+                        javax.swing.table.TableColumn column = header.getColumnModel().getColumn(columnIndex);
+                        Object identifier = column.getIdentifier();
+                        String columnId = identifier != null ? identifier.toString() : null;
                         
-                        // BrowserControllerにソートを依頼
-                        if (browserController != null) {
+                        if (columnId != null && !columnId.isEmpty()) {
                             // 現在のソート状態を確認
-                            boolean ascending = browserController.getSortAscending();
+                            boolean ascending = browserController.isSortAscending();
                             String currentSortColumn = browserController.getSortColumn();
                             
                             // 同じ列をクリックした場合は昇順/降順を切り替え
@@ -423,12 +440,14 @@ public class DatabaseOutlineView extends JXTreeTable {
                                 ascending = true; // 新しい列の場合は昇順から
                             }
                             
+                            // HOROS-20240407準拠: outlineView:sortDescriptorsDidChange:相当（6665行目）
+                            // ソートを実行
                             browserController.setSortColumn(columnId, ascending);
                         }
                     }
                 }
-            });
-        }
+            }
+        });
     }
     
     /**
@@ -520,8 +539,9 @@ public class DatabaseOutlineView extends JXTreeTable {
     /**
      * カラム状態を取得（保存用）
      * HOROS-20240407準拠: MyOutlineView.m 68-82行目 - (NSObject<NSCoding>*)columnState
+     * HOROS-20240407準拠: 列の順序（位置）も保存する（Java/WindowsとObjective-C/macOSの違いを埋めるための最小限のカスタムロジック）
      * 
-     * @return カラム状態（識別子と幅のマップのリスト）
+     * @return カラム状態（識別子、幅、順序のマップのリスト）
      */
     public List<Map<String, Object>> getColumnState() {
         List<Map<String, Object>> state = new ArrayList<>();
@@ -531,11 +551,13 @@ public class DatabaseOutlineView extends JXTreeTable {
             javax.swing.table.TableColumn column = columnModel.getColumn(i);
             Object identifier = column.getIdentifier();
             
-            // 非表示のカラムは除外
-            if (identifier != null && !column.getHeaderValue().toString().isEmpty()) {
+            // 非表示のカラムは除外（幅が0の場合は非表示とみなす）
+            if (identifier != null && column.getWidth() > 0) {
                 Map<String, Object> columnInfo = new HashMap<>();
                 columnInfo.put("Identifier", identifier.toString());
                 columnInfo.put("Width", column.getPreferredWidth());
+                // HOROS-20240407準拠: 列の順序（位置）を保存（Java Swingでは明示的に保存する必要がある）
+                columnInfo.put("Index", i);
                 state.add(columnInfo);
             }
         }
@@ -546,19 +568,21 @@ public class DatabaseOutlineView extends JXTreeTable {
     /**
      * カラム状態を復元
      * HOROS-20240407準拠: MyOutlineView.m 84-111行目 - (void)restoreColumnState:(NSArray*)state
+     * HOROS-20240407準拠: 列の順序（位置）も復元する（Java/WindowsとObjective-C/macOSの違いを埋めるための最小限のカスタムロジック）
      * 
-     * @param state カラム状態（識別子と幅のマップのリスト）
+     * @param state カラム状態（識別子、幅、順序のマップのリスト）
      */
     public void restoreColumnState(List<Map<String, Object>> state) {
         if (state == null || state.isEmpty()) {
             return;
         }
         
-        // すべてのカラムを非表示にする（nameカラム以外）
-        hideAllColumns();
-        
         javax.swing.table.TableColumnModel columnModel = getColumnModel();
+        if (columnModel == null) {
+            return;
+        }
         
+        // HOROS-20240407準拠: まず列の幅を復元
         for (Map<String, Object> params : state) {
             String identifier = (String) params.get("Identifier");
             Object widthObj = params.get("Width");
@@ -594,11 +618,62 @@ public class DatabaseOutlineView extends JXTreeTable {
                     
                     if (identifier.equals(colIdentifier != null ? colIdentifier.toString() : "")) {
                         column.setPreferredWidth(width);
-                        // カラムを表示（非表示にしない）
-                        // Swingではカラムの表示/非表示は別の方法で制御する必要がある
-                        // ここでは幅のみを復元
+                        // カラムを表示（幅が0より大きい場合は表示）
+                        if (width > 0) {
+                            column.setWidth(width);
+                        }
                         break;
                     }
+                }
+            }
+        }
+        
+        // HOROS-20240407準拠: 列の順序（位置）を復元
+        // 保存された順序に従って列を並び替える
+        // nameカラムは常に最初の位置に固定
+        List<Map<String, Object>> sortedState = new ArrayList<>(state);
+        sortedState.sort((a, b) -> {
+            // nameカラムは常に最初
+            String idA = (String) a.get("Identifier");
+            String idB = (String) b.get("Identifier");
+            if (COL_NAME.equals(idA)) return -1;
+            if (COL_NAME.equals(idB)) return 1;
+            
+            // その他の列は保存されたIndex順
+            Object indexA = a.get("Index");
+            Object indexB = b.get("Index");
+            if (indexA instanceof Number && indexB instanceof Number) {
+                return Integer.compare(((Number) indexA).intValue(), ((Number) indexB).intValue());
+            }
+            return 0;
+        });
+        
+        // 列の順序を復元（nameカラムを除く）
+        for (int targetIndex = 1; targetIndex < sortedState.size(); targetIndex++) {
+            Map<String, Object> params = sortedState.get(targetIndex);
+            String identifier = (String) params.get("Identifier");
+            
+            if (identifier == null || COL_NAME.equals(identifier)) {
+                continue;
+            }
+            
+            // 識別子でカラムを検索
+            int currentIndex = -1;
+            for (int i = 0; i < columnModel.getColumnCount(); i++) {
+                javax.swing.table.TableColumn column = columnModel.getColumn(i);
+                Object colIdentifier = column.getIdentifier();
+                if (identifier.equals(colIdentifier != null ? colIdentifier.toString() : "")) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+            
+            // 列が見つかり、現在の位置が目標位置と異なる場合は移動
+            if (currentIndex >= 0 && currentIndex != targetIndex) {
+                try {
+                    columnModel.moveColumn(currentIndex, targetIndex);
+                } catch (IllegalArgumentException e) {
+                    // 移動に失敗した場合はスキップ（列が存在しない、または範囲外）
                 }
             }
         }
@@ -615,6 +690,18 @@ public class DatabaseOutlineView extends JXTreeTable {
         // Swingではカラムの表示/非表示は直接制御できないため、
         // ここでは何もしない（幅の復元のみを行う）
         // 必要に応じて、カラムモデルから削除するなどの方法を検討
+    }
+    
+    /**
+     * 列の識別子を取得
+     * @param columnIndex 列のインデックス
+     * @return 列の識別子、存在しない場合はnull
+     */
+    public String getColumnIdentifier(int columnIndex) {
+        if (columnIndex >= 0 && columnIndex < COLUMN_IDENTIFIERS.length) {
+            return COLUMN_IDENTIFIERS[columnIndex];
+        }
+        return null;
     }
     
     /**
@@ -642,13 +729,124 @@ public class DatabaseOutlineView extends JXTreeTable {
             
             if (identifier.equals(colIdentifier != null ? colIdentifier.toString() : "")) {
                 // HOROS-20240407準拠: 列が存在し、非表示でない場合にtrueを返す
-                // Swingでは列の表示/非表示は直接制御できないため、列が存在する場合はtrueを返す
-                // 列幅が0の場合は非表示とみなす
+                // Swingでは列の表示/非表示は列幅が0より大きいかどうかで判断
+                // 列がカラムモデルに存在し、幅が0より大きい場合は表示されている
                 return column.getWidth() > 0;
             }
         }
         
         return false;
+    }
+    
+    /**
+     * 列の表示/非表示を設定
+     * HOROS-20240407準拠: MyOutlineView.m 113-132行目 - (void)setColumnWithIdentifier:(id)identifier visible:(BOOL)visible
+     * 
+     * @param identifier 列の識別子
+     * @param visible 表示する場合true、非表示にする場合false
+     */
+    public void setColumnWithIdentifierVisible(String identifier, boolean visible) {
+        // HOROS-20240407準拠: "name"列は常に表示（非表示にできない）
+        if (COL_NAME.equals(identifier)) {
+            return;
+        }
+        
+        javax.swing.table.TableColumnModel columnModel = getColumnModel();
+        if (columnModel == null) {
+            return;
+        }
+        
+        // HOROS-20240407準拠: 識別子で列を検索
+        javax.swing.table.TableColumn column = null;
+        int columnIndex = -1;
+        for (int i = 0; i < columnModel.getColumnCount(); i++) {
+            javax.swing.table.TableColumn col = columnModel.getColumn(i);
+            Object colIdentifier = col.getIdentifier();
+            if (identifier.equals(colIdentifier != null ? colIdentifier.toString() : "")) {
+                column = col;
+                columnIndex = i;
+                break;
+            }
+        }
+        
+        if (column == null) {
+            return;
+        }
+        
+        // HOROS-20240407準拠: 列の表示/非表示を設定
+        // Swingでは列幅を0にするか、列を削除/追加する方法がある
+        // 列幅を0にする方法を使用（列は残るが表示されない）
+        if (visible) {
+            // HOROS-20240407準拠: 表示する場合は列幅を復元（デフォルト幅を使用）
+            if (column.getWidth() == 0) {
+                // デフォルト幅を設定（列の識別子に応じて適切な幅を設定）
+                int defaultWidth = getDefaultColumnWidth(identifier);
+                column.setPreferredWidth(defaultWidth);
+                column.setWidth(defaultWidth);
+                column.setMinWidth(0);
+                column.setMaxWidth(Integer.MAX_VALUE);
+            }
+            // HOROS-20240407準拠: 表示する場合は列を適切な位置に移動
+            // Swingでは列の順序を変更する必要がある場合があるが、ここでは簡易実装
+        } else {
+            // HOROS-20240407準拠: 非表示にする場合は列幅を0にする
+            column.setWidth(0);
+            column.setPreferredWidth(0);
+            column.setMinWidth(0);
+            column.setMaxWidth(0);
+        }
+        
+        // HOROS-20240407準拠: テーブルを再描画
+        repaint();
+    }
+    
+    /**
+     * 列のデフォルト幅を取得
+     * @param identifier 列の識別子
+     * @return デフォルト幅
+     */
+    private int getDefaultColumnWidth(String identifier) {
+        // HOROS-20240407準拠: 列の識別子に応じて適切なデフォルト幅を返す
+        switch (identifier) {
+            case COL_PATIENT_ID:
+                return 100;
+            case COL_YEAR_OLD:
+                return 80;
+            case COL_ACCESSION_NUMBER:
+                return 120;
+            case COL_STUDY_NAME:
+                return 150;
+            case COL_MODALITY:
+                return 80;
+            case COL_ID:
+                return 80;
+            case COL_COMMENT:
+                return 150;
+            case COL_STATE_TEXT:
+                return 100;
+            case COL_DATE:
+                return 150;
+            case COL_NO_FILES:
+                return 80;
+            case COL_NO_SERIES:
+                return 80;
+            case COL_DATE_ADDED:
+                return 150;
+            case COL_DATE_OPENED:
+                return 150;
+            case COL_REFERRING_PHYSICIAN:
+                return 150;
+            case COL_PERFORMING_PHYSICIAN:
+                return 150;
+            case COL_INSTITUTION_NAME:
+                return 150;
+            case COL_ALBUMS_NAMES:
+                return 150;
+            case COL_DATE_OF_BIRTH:
+                return 120;
+            default:
+                return 100;
+        }
     }
     
     /**

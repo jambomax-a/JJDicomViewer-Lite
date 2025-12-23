@@ -883,6 +883,7 @@ public class DicomDatabase {
     /**
      * データベースに保存
      * HOROS-20240407準拠: - (BOOL)save:(NSError**)error
+     * 最適化: バッチ処理でトランザクションを使用して高速化
      */
     public boolean save() {
         if (sqliteConnection == null) {
@@ -891,7 +892,8 @@ public class DicomDatabase {
         }
         
         try {
-            logger.info("Saving data to SQLite database...");
+            // HOROS-20240407準拠: トランザクションを使用して高速化
+            sqliteConnection.setAutoCommit(false);
             
             synchronized (studies) {
                 for (DicomStudy study : studies) {
@@ -899,10 +901,18 @@ public class DicomDatabase {
                 }
             }
             
-            logger.info("Data saved successfully");
+            sqliteConnection.commit();
+            sqliteConnection.setAutoCommit(true);
+            
             return true;
         } catch (SQLException e) {
             logger.error("Failed to save data to database", e);
+            try {
+                sqliteConnection.rollback();
+                sqliteConnection.setAutoCommit(true);
+            } catch (SQLException e2) {
+                logger.error("Failed to rollback transaction", e2);
+            }
             return false;
         }
     }
