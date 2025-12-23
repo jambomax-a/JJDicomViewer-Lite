@@ -1,0 +1,9 @@
+---
+storagePath: "E:\\Vet-System-BK\\data"
+databasePath: "E:\\Vet-System-BK\\metadata.db"
+language: "ja"
+localAETitle: "JJDICOMVIEWER"
+defaultRemoteHost: "192.168.24.10"
+defaultRemotePort: 4242
+defaultRemoteAETitle: "ORTHANC"
+

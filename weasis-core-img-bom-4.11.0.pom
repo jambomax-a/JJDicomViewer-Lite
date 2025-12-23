@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.weasis.core</groupId>
+  <artifactId>weasis-core-img-bom</artifactId>
+  <version>4.11.0</version>
+  <packaging>pom</packaging>
+  <name>Weasis Core Image BOM</name>
+  <description>Bill of Materials for Weasis Core Image - Empty BOM for dcm4che compatibility</description>
+  <dependencyManagement>
+    <dependencies>
+      <!-- Empty BOM - weasis is not needed for this project -->
+    </dependencies>
+  </dependencyManagement>
+</project>
+

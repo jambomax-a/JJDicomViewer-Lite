@@ -105,6 +105,9 @@ public class BrowserController extends JFrame {
     
     // HOROS-20240407準拠: splitSourcesActivity（SourcesとActivityを分割するスプリッター）
     private JSplitPane splitSourcesActivity;
+    
+    // HOROS-20240407準拠: IBOutlet NSSplitView *splitComparative; (BrowserController.h 111行目)
+    private JSplitPane splitComparative;
 
     // HOROS-20240407準拠: BOOL loadingIsOver = NO; (BrowserController.m 174行目)
     private boolean loadingIsOver = false;
@@ -308,9 +311,8 @@ public class BrowserController extends JFrame {
         activityScroll.setBorder(null);
         splitSourcesActivity.setBottomComponent(activityScroll);
         // HOROS-20240407準拠: MainMenu.xib 4143行目 - Sources box height="381"
-        // HOROS-20240407準拠: MainMenu.xib 4212行目 - Activity box height="108"
-        // Sources: 381px (約78%), Activity: 108px (約22%)
-        splitSourcesActivity.setResizeWeight(0.78); // Sourcesが78%（HOROS-20240407準拠）
+        // Sourcesパネルの高さを3/4に設定
+        splitSourcesActivity.setResizeWeight(0.75); // Sourcesが75%（3/4）
 
         // splitAlbumsの下部にSourcesとActivityを含むスプリッターを設定
         splitAlbums.setBottomComponent(splitSourcesActivity);
@@ -329,12 +331,21 @@ public class BrowserController extends JFrame {
         splitAlbums.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
             saveDividerLocations();
         });
+        // splitComparativeのディバイダー位置変更も監視（後で追加されるため、ここでは設定しない）
         
         // 初期ディバイダー位置を復元（ウィンドウが表示された後に実行）
         addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentShown(java.awt.event.ComponentEvent e) {
                 restoreDividerLocations();
+                // splitComparativeのディバイダー位置変更を監視（保存用）
+                SwingUtilities.invokeLater(() -> {
+                    if (splitComparative != null) {
+                        splitComparative.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+                            saveDividerLocations();
+                        });
+                    }
+                });
             }
         });
 
@@ -345,7 +356,7 @@ public class BrowserController extends JFrame {
         // ========== 右側メインパネル ==========
         // HOROS-20240407準拠: MainMenu.xib 4281行目 - splitComparative (id="14729") 垂直スプリッター
         // HOROS-20240407準拠: BrowserController.h 111行目 IBOutlet NSSplitView *splitComparative;
-        JSplitPane splitComparative = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+        splitComparative = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
 
         // 上部テーブルエリア（水平スプリッター）: databaseOutline | comparativeScrollView
         // HOROS-20240407準拠: MainMenu.xib 4284-4714行目
@@ -412,66 +423,64 @@ public class BrowserController extends JFrame {
         bottomPreviewSplit.setRightComponent(imageView);
         bottomPreviewSplit.setResizeWeight(0.3); // サムネイルが30%
 
-        // ステータスバー（水平スプリッター）: 左パネル（ボタン+databaseDescription） | 右パネル（animationSlider+Playボタン）
-        // HOROS-20240407準拠: MainMenu.xib 4895行目 - splitView id="14352" (_bottomSplit) 水平スプリッター
+        // ステータスバー: 左側（databaseDescription） | 右側（animationSlider + Playボタン）
+        // HOROS-20240407準拠: MainMenu.xib 4895行目 - splitView id="14352" (_bottomSplit)
+        // ただし、デバイダーは不要なため、JSplitPaneではなくBorderLayoutで配置
         // HOROS-20240407準拠: BrowserController.h 144行目 IBOutlet NSSplitView* _bottomSplit;
-        JSplitPane bottomSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        JPanel bottomSplit = new JPanel(new BorderLayout());
         
         // 左パネル: databaseDescriptionのみ（ボタンは存在しない）
-        // HOROS-20240407準拠: MainMenu.xib 4899行目 - customView id="et0-HG-KxJ"
+        // HOROS-20240407準拠: MainMenu.xib 4899行目 - customView id="et0-HG-KxJ" width="431"
         // HOROS-20240407準拠: MainMenu.xib 4914行目 - textField id="14357" (databaseDescription)
         // HOROS-20240407準拠: BrowserController.h 129行目 IBOutlet NSTextField *databaseDescription;
         databaseDescription = new JTextField("Local Database: Documents DB / No album selected / Result = 0 studies (0 images)");
         databaseDescription.setEditable(false);
         databaseDescription.setBorder(null);
         databaseDescription.setHorizontalAlignment(JTextField.LEFT);
-        bottomSplit.setLeftComponent(databaseDescription);
+        bottomSplit.add(databaseDescription, BorderLayout.WEST);
         
         // 右パネル: animationSlider + Playボタン
-        // HOROS-20240407準拠: MainMenu.xib 4925行目 - customView id="14354"
-        // HOROS-20240407準拠: MainMenu.xib 4926行目 - rect width="611" height="21"
-        JPanel rightStatusPanel = new JPanel(new BorderLayout());
-        rightStatusPanel.setPreferredSize(new java.awt.Dimension(611, 21));
-        
-        // animationSlider
+        // HOROS-20240407準拠: MainMenu.xib 4925行目 - customView id="14354" width="611"
         // HOROS-20240407準拠: MainMenu.xib 4929行目 - slider id="1293" (animationSlider)
+        // HOROS-20240407準拠: MainMenu.xib 4939行目 - button id="1294" (Play)
+        JPanel rightStatusPanel = new JPanel(null);
+        rightStatusPanel.setPreferredSize(new java.awt.Dimension(611, 21));
+        rightStatusPanel.setMinimumSize(new java.awt.Dimension(611, 21));
+        rightStatusPanel.setMaximumSize(new java.awt.Dimension(611, 21));
+        rightStatusPanel.setLayout(null);
+        
+        // Playチェックボックス（右端に配置、幅を1.5倍に）
+        // 元の幅40px → 60px（1.5倍）
+        // HOROS-20240407準拠: BrowserController.h 143行目 IBOutlet NSButton *animationCheck;
+        // HOROS-20240407準拠: MainMenu.xib 4942行目 - controlSize="mini" font="metaFont="miniSystem"
+        javax.swing.JCheckBox playCheckBox = new javax.swing.JCheckBox("Play");
+        java.awt.Font miniFont = new java.awt.Font(playCheckBox.getFont().getName(), 
+            java.awt.Font.PLAIN, Math.max(9, playCheckBox.getFont().getSize() - 2));
+        playCheckBox.setFont(miniFont);
+        // 右端に配置、幅60px（1.5倍）、高さ20px（そのまま）
+        playCheckBox.setBounds(611 - 60, 2, 60, 20);
+        rightStatusPanel.add(playCheckBox);
+        
+        // animationSlider（Playチェックボックスのすぐ左隣に配置）
         // HOROS-20240407準拠: MainMenu.xib 4930行目 - rect width="294" height="16"
         // HOROS-20240407準拠: BrowserController.h 142行目 IBOutlet NSSlider *animationSlider;
         animationSlider = new JSlider(JSlider.HORIZONTAL, 0, 0, 0);
         animationSlider.setEnabled(false);
-        animationSlider.setPreferredSize(new java.awt.Dimension(294, 16));
+        // Playチェックボックスの左隣に配置（幅294pxのまま）
+        animationSlider.setBounds(611 - 60 - 294, 2, 294, 16);
         animationSlider.addChangeListener(e -> {
             if (!animationSlider.getValueIsAdjusting()) {
                 previewSliderAction(animationSlider);
             }
         });
-        rightStatusPanel.add(animationSlider, BorderLayout.CENTER);
+        rightStatusPanel.add(animationSlider);
         
-        // Playチェックボックス
-        // HOROS-20240407準拠: MainMenu.xib 4939行目 - button id="1294" type="check"
-        // HOROS-20240407準拠: BrowserController.h 143行目 IBOutlet NSButton *animationCheck;
-        // HOROS-20240407準拠: MainMenu.xib 4940行目 - rect width="40" height="20"
-        // HOROS-20240407準拠: MainMenu.xib 4942行目 - controlSize="mini" font="metaFont="miniSystem"
-        // HOROS-20240407準拠: MainMenu.xib 4942行目 - lineBreakMode="clipping"（文字が切れてもOK）
-        javax.swing.JCheckBox playCheckBox = new javax.swing.JCheckBox("Play");
-        // Java SwingではminiSystemフォントがないため、小さなフォントサイズを設定
-        // HOROS-20240407準拠: controlSize="mini"に相当するサイズ調整（プラットフォーム差の調整）
-        java.awt.Font miniFont = new java.awt.Font(playCheckBox.getFont().getName(), 
-            java.awt.Font.PLAIN, Math.max(9, playCheckBox.getFont().getSize() - 2));
-        playCheckBox.setFont(miniFont);
-        playCheckBox.setPreferredSize(new java.awt.Dimension(40, 20));
-        playCheckBox.setMinimumSize(new java.awt.Dimension(40, 20));
-        playCheckBox.setMaximumSize(new java.awt.Dimension(40, 20));
-        // HOROS-20240407準拠: horizontalCompressionResistancePriority="1000"（右端に固定）
-        rightStatusPanel.add(playCheckBox, BorderLayout.EAST);
-        
-        bottomSplit.setRightComponent(rightStatusPanel);
-        bottomSplit.setResizeWeight(0.0); // 左パネルが固定
+        bottomSplit.add(rightStatusPanel, BorderLayout.EAST);
 
         // bottomPreviewSplitのみをsplitComparativeの下部に配置（ステータスバーは後で追加）
+        // 右側の垂直スプリットの位置を上から約50%の位置に設定（上部50%、下部50%）
         splitComparative.setBottomComponent(bottomPreviewSplit);
-        splitComparative.setResizeWeight(0.5); // 上部テーブルエリアが50%
-        splitComparative.setDividerLocation(400);
+        splitComparative.setResizeWeight(0.5); // 上部テーブルエリアが50%、下部プレビューエリアが50%
 
         // ========== メインウィンドウ（水平スプリッター） ==========
         // HOROS-20240407準拠: splitViewHorz - 左サイドバー | 右メインパネル
@@ -654,6 +663,12 @@ public class BrowserController extends JFrame {
                 prefs.putInt("SourcesActivityDividerLocation", sourcesActivityDividerLocation);
             }
             
+            // splitComparativeのディバイダー位置も保存
+            if (splitComparative != null && splitComparative.getHeight() > 0) {
+                int comparativeDividerLocation = splitComparative.getDividerLocation();
+                prefs.putInt("ComparativeDividerLocation", comparativeDividerLocation);
+            }
+            
             prefs.flush();
         } catch (Exception e) {
             // エラーが発生した場合は保存をスキップ
@@ -691,9 +706,21 @@ public class BrowserController extends JFrame {
                     double ratio = (double) savedLocation / splitSourcesActivity.getHeight();
                     splitSourcesActivity.setDividerLocation(ratio);
                 } else {
-                    // デフォルト位置: Sourcesが381px
-                    double sourcesRatio = 381.0 / 489.0;
-                    splitSourcesActivity.setDividerLocation(sourcesRatio);
+                    // デフォルト位置: Sourcesが1/3、Activityが2/3
+                    splitSourcesActivity.setDividerLocation(0.33);
+                }
+            }
+            
+            // splitComparativeのディバイダー位置も復元
+            if (splitComparative != null && splitComparative.getHeight() > 0) {
+                int savedLocation = prefs.getInt("ComparativeDividerLocation", -1);
+                if (savedLocation > 0) {
+                    // 保存された位置を復元（比率で設定）
+                    double ratio = (double) savedLocation / splitComparative.getHeight();
+                    splitComparative.setDividerLocation(ratio);
+                } else {
+                    // デフォルト位置: 上から50%
+                    splitComparative.setDividerLocation(0.5);
                 }
             }
         } catch (Exception e) {
