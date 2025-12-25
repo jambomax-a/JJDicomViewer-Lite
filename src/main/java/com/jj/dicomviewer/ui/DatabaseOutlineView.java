@@ -57,6 +57,111 @@ public class DatabaseOutlineView extends JXTreeTable {
     private BrowserController browserController;
     private DatabaseOutlineTreeTableModel treeTableModel;
     
+    
+    /**
+     * prepareRendererをオーバーライド（UIDハイライトを処理）
+     * JXTreeTableでは、最初の列（階層表示用）にTreeTableCellRendererが使用されるため、
+     * prepareRendererで背景色を設定する
+     * HOROS-20240407準拠: BrowserController.m 6739-6756行目 - willDisplayCell
+     * 
+     * 注意: 最初の列（インデックス0）は開閉マーク専用で、データは表示しない
+     */
+    @Override
+    public java.awt.Component prepareRenderer(javax.swing.table.TableCellRenderer renderer, int row, int column) {
+        java.awt.Component component = super.prepareRenderer(renderer, row, column);
+        
+        // HOROS-20240407準拠: 最初の列（インデックス0）は開閉マーク専用で、データは表示しない
+        // カスタムレンダラーで開閉マークのみを表示する
+        if (column == 0 && component instanceof javax.swing.JLabel) {
+            javax.swing.JLabel label = (javax.swing.JLabel) component;
+            label.setText(""); // データを非表示（開閉マークのみ表示）
+        }
+        
+        // HOROS-20240407準拠: name列（識別子が"name"の列、2番目の列）のみで背景色を設定
+        // 注意: 最初の列（インデックス0）は開閉マーク専用、Patient Name列は2番目の列（インデックス1）
+        // 列が移動しても識別子で判定するため、Patient Name列が4列目に移動してもUIDハイライトが動作する
+        // 最初の列（開閉マーク専用列）ではハイライトを適用しない
+        if (component != null && browserController != null && column != 0) {
+            // 列の識別子を確認（列が移動しても識別子で判定）
+            javax.swing.table.TableColumn tableColumn = getColumnModel().getColumn(column);
+            Object columnIdentifier = tableColumn != null ? tableColumn.getIdentifier() : null;
+            boolean isNameColumn = columnIdentifier != null && (COL_NAME.equals(columnIdentifier.toString()) || "name".equals(columnIdentifier.toString()));
+            
+            // name列の場合のみUIDハイライトを処理
+            if (isNameColumn && !isRowSelected(row)) {
+                // HOROS-20240407準拠: displaySamePatientWithColorBackground設定を確認
+                boolean displaySamePatientWithColorBackground = true;
+                boolean isFocused = true;
+                
+                if (displaySamePatientWithColorBackground && isFocused) {
+                    Object previousItem = browserController.getPreviousItem();
+                    if (previousItem != null && previousItem instanceof com.jj.dicomviewer.model.DicomStudy) {
+                        try {
+                            TreePath path = getPathForRow(row);
+                            if (path != null) {
+                                Object item = path.getLastPathComponent();
+                                
+                                // 選択行自体は除外
+                                boolean isSameItem = (previousItem == item) || (previousItem.equals(item));
+                                if (!isSameItem && item instanceof com.jj.dicomviewer.model.DicomStudy) {
+                                    com.jj.dicomviewer.model.DicomStudy currentStudy = (com.jj.dicomviewer.model.DicomStudy) item;
+                                    com.jj.dicomviewer.model.DicomStudy previousStudy = (com.jj.dicomviewer.model.DicomStudy) previousItem;
+                                    
+                                    String patientUID = currentStudy.getPatientUID();
+                                    String previousPatientUID = previousStudy.getPatientUID();
+                                    
+                                    // 患者UIDが一致する場合、背景色を設定
+                                    if (patientUID != null && patientUID.length() > 1 &&
+                                        previousPatientUID != null && previousPatientUID.length() > 1 &&
+                                        patientUID.equalsIgnoreCase(previousPatientUID)) {
+                                        
+                                        // HOROS-20240407準拠: 薄いグレーの背景色を設定
+                                        // 薄いグレー（RGB: 220, 220, 220）を使用
+                                        java.awt.Color highlightColor = new java.awt.Color(220, 220, 220);
+                                        
+                                        if (component instanceof javax.swing.JLabel) {
+                                            javax.swing.JLabel label = (javax.swing.JLabel) component;
+                                            label.setOpaque(true);
+                                            label.setBackground(highlightColor);
+                                        } else if (component instanceof javax.swing.JPanel) {
+                                            javax.swing.JPanel panel = (javax.swing.JPanel) component;
+                                            panel.setOpaque(true);
+                                            panel.setBackground(highlightColor);
+                                        } else {
+                                            // その他のコンポーネントタイプの場合、背景色を設定を試みる
+                                            component.setBackground(highlightColor);
+                                            if (component instanceof javax.swing.JComponent) {
+                                                ((javax.swing.JComponent) component).setOpaque(true);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            // エラーが発生した場合はスキップ
+                        }
+                    }
+                }
+            }
+        }
+        
+        return component;
+    }
+    
+    /**
+     * paintComponentをオーバーライド（UIDハイライトはセルレンダラーで処理）
+     * HOROS-20240407準拠: BrowserController.m 6739-6756行目 - willDisplayCell
+     * willDisplayCellでセルに背景色を設定するため、セルレンダラーで処理する
+     * paintComponentでの描画は削除（セルレンダラーと競合するため）
+     */
+    @Override
+    protected void paintComponent(java.awt.Graphics g) {
+        // HOROS-20240407準拠: willDisplayCellでセルに背景色を設定するため、
+        // セルレンダラー（ComparativePatientCellRenderer）で処理する
+        // paintComponentでの描画は削除（セルレンダラーと競合するため）
+        super.paintComponent(g);
+    }
+    
     // HOROS-20240407準拠: 列識別子（MainMenu.xibの順番通り）
     public static final String COL_NAME = "name";
     public static final String COL_REPORT_URL = "reportURL";
@@ -217,6 +322,8 @@ public class DatabaseOutlineView extends JXTreeTable {
         // JXTreeTableはTreeModelを直接使用できないため、TreeTableModelアダプターが必要
         // 簡易実装: TreeModelをTreeTableModelに変換
         this.treeTableModel = new DatabaseOutlineTreeTableModel(browserController);
+        // HOROS-20240407準拠: TreeTableModelにDatabaseOutlineViewへの参照を設定（列の識別子を取得するため）
+        treeTableModel.setOutlineView(this);
         setTreeTableModel(treeTableModel);
         
         // デフォルト設定
@@ -228,6 +335,8 @@ public class DatabaseOutlineView extends JXTreeTable {
         
         // HOROS-20240407準拠: 横スクロールを有効にする
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        // HOROS-20240407準拠: 列を自動的に作成（NSOutlineViewは自動的に列を作成）
+        // ただし、列の識別子を確実に設定するため、falseにして手動で列を作成
         setAutoCreateColumnsFromModel(false);
         
         // HOROS-20240407準拠: 行選択を有効にする（どのカラムをクリックしても行が選択される）
@@ -241,20 +350,95 @@ public class DatabaseOutlineView extends JXTreeTable {
         // ダブルクリックリスナーを追加
         addDoubleClickListener();
         
-        // HOROS-20240407準拠: NSOutlineViewが自動的にヘッダークリックを処理し、outlineView:sortDescriptorsDidChange:で検知（6665行目）
-        // Java Swingでは、JXTreeTableが自動的にヘッダークリックを処理する機能を持っていないため、
-        // 手動でリスナーを追加する必要がある（Java/WindowsとObjective-C/macOSの違いを埋めるための最小限のカスタムロジック）
-        addColumnHeaderClickListener();
+        // HOROS-20240407準拠: name列（識別子が"name"の列）のみでUIDハイライトを適用
+        // prepareRendererで処理するため、TreeCellRendererのカスタマイズは不要
+        
+        // HOROS-20240407準拠: BrowserController.m 6665行目 - outlineView:sortDescriptorsDidChange:
+        // NSOutlineViewは自動的にヘッダークリックでソートし、sortDescriptorsDidChange:を呼び出す
+        // Java SwingのJXTreeTableにはこの自動機能がないため、手動でリスナーを追加
+        // 【カスタムロジック】プラットフォーム差を埋めるための必要最小限の実装
+        // 注意: MouseListenerを追加すると列の移動とリサイズが妨害されるため、一旦無効化
+        // TODO: 列の移動とリサイズが動作することを確認後、ソート機能を再実装
+        // addColumnHeaderClickListener();
         
         // HOROS-20240407準拠: ソートインジケーター表示用のカスタムヘッダーレンダラーを設定
         setCustomHeaderRenderer();
         
+        // HOROS-20240407準拠: BrowserController.m 6739-6756行目 - willDisplayCell
+        // 履歴パネルに表示されているスタディと同じ患者UIDを持つDBリスト行の背景色を変更
+        // HOROS-20240407準拠: name列（最初の列）のみで背景色を設定（6739行目）
+        // 列が作成された後にレンダラーを設定する必要があるため、SwingUtilities.invokeLaterを使用
+        
         // HOROS-20240407準拠: 列幅を設定（リサイズ可能にする）
         // 列が作成された後に呼び出す必要があるため、SwingUtilities.invokeLaterを使用
         SwingUtilities.invokeLater(() -> {
+            // HOROS-20240407準拠: name列（最初の列）のみで背景色を設定（6739行目）
+            // JXTreeTableでは、列が移動した場合でも正しい列を識別するため、
+            // すべての列にレンダラーを設定し、レンダラー内でname列かどうかを判定
+            ComparativePatientCellRenderer comparativeRenderer = new ComparativePatientCellRenderer();
+            // すべての列にレンダラーを設定（列が移動した場合でも正しく動作するため）
+            javax.swing.table.TableColumnModel colModel = getColumnModel();
+            // デフォルトレンダラーも設定（JXTreeTableが最初の列に特別なレンダラーを使用する可能性があるため）
+            setDefaultRenderer(Object.class, comparativeRenderer);
+            for (int i = 0; i < colModel.getColumnCount(); i++) {
+                javax.swing.table.TableColumn column = colModel.getColumn(i);
+                Object identifier = column.getIdentifier();
+                // 識別子が正しく設定されていない場合は、COLUMN_IDENTIFIERSから設定
+                if (i < COLUMN_IDENTIFIERS.length && (identifier == null || !COLUMN_IDENTIFIERS[i].equals(identifier.toString()))) {
+                    column.setIdentifier(COLUMN_IDENTIFIERS[i]);
+                }
+                column.setCellRenderer(comparativeRenderer);
+            }
+            // HOROS-20240407準拠: BrowserController.m 11646行目、MyOutlineView.m 127行目 - moveColumn:toColumn:
+            // NSOutlineViewは標準で列の移動をサポート（columnReordering）
+            // Java Swingでも標準機能（setReorderingAllowed）を使用
+            // 【標準機能】カスタムロジックではない
+            javax.swing.table.JTableHeader header = getTableHeader();
+            if (header != null) {
+                header.setReorderingAllowed(true);
+            }
+            
             applyColumnWidths();
-            // HOROS-20240407準拠: 初期化時はソートインジケーターを表示しない（ソートしていない状態）
-            // ソートインジケーターは、ユーザーが列ヘッダーをクリックしてソートした時のみ表示される
+            
+            // 列の移動とリサイズを確実に有効にする（applyColumnWidths()の後に再設定）
+            if (header != null) {
+                header.setReorderingAllowed(true);
+            }
+            // HOROS-20240407準拠: 最初の列（階層表示用）は固定（移動不可、リサイズ不可）
+            // Patient Name列は2番目の列として作成される
+            javax.swing.table.TableColumnModel columnModel = getColumnModel();
+            if (columnModel != null) {
+                for (int i = 0; i < columnModel.getColumnCount(); i++) {
+                    javax.swing.table.TableColumn column = columnModel.getColumn(i);
+                    
+                    // HOROS-20240407準拠: 最初の列（インデックス0）は開閉マーク専用で固定
+                    // 移動不可、リサイズ不可
+                    if (i == 0) {
+                        column.setResizable(false);
+                        column.setMinWidth(20); // 開閉マークのみの幅
+                        column.setMaxWidth(20); // 固定幅
+                        column.setPreferredWidth(20);
+                        column.setWidth(20);
+                    } else {
+                        // その他の列は移動可能、リサイズ可能
+                        column.setResizable(true);
+                        // 列の最小幅を設定（リサイズを確実に有効にする）
+                        if (column.getMinWidth() < 20) {
+                            column.setMinWidth(20);
+                        }
+                    }
+                }
+            }
+            
+            // HOROS-20240407準拠: 列の移動を制限（最初の列は移動不可）
+            // カスタムヘッダーで列移動を制御
+            setupColumnReorderingRestrictions();
+            
+            // HOROS-20240407準拠: BrowserController.m 6665行目 - outlineView:sortDescriptorsDidChange:
+            // NSOutlineViewは自動的にヘッダークリックでソートし、sortDescriptorsDidChange:を呼び出す
+            // Java SwingのJXTreeTableにはこの自動機能がないため、手動でリスナーを追加する必要がある
+            // 【重要】列の移動とリサイズを妨害しないよう、イベントを消費しないように実装
+            addColumnHeaderClickListener();
         });
     }
     
@@ -262,21 +446,27 @@ public class DatabaseOutlineView extends JXTreeTable {
     private String currentSortColumn = null;
     private boolean currentSortAscending = true;
     
+    // 列の復元中かどうかを示すフラグ（columnMovedイベントを無視するため）
+    private boolean isRestoringColumns = false;
+    
     /**
      * カスタムヘッダーレンダラーを設定（ソートインジケーター表示用）
      * HOROS-20240407準拠: NSOutlineViewのsetIndicatorImage:inTableColumn:相当
+     * 
+     * 注意: デフォルトヘッダーレンダラーを設定すると列の移動とリサイズが妨害されるため、
+     * ソートインジケーターはupdateSortIndicator()で個別の列に設定する
      */
     private void setCustomHeaderRenderer() {
-        // デフォルトヘッダーレンダラーを設定
-        javax.swing.table.JTableHeader header = getTableHeader();
-        if (header != null) {
-            header.setDefaultRenderer(new SortableHeaderRenderer());
-        }
+        // デフォルトヘッダーレンダラーは設定しない（列の移動とリサイズを妨害しないため）
+        // ソートインジケーターはupdateSortIndicator()で個別の列に設定する
     }
     
     /**
      * ソートインジケーターを更新
      * HOROS-20240407準拠: setIndicatorImage:inTableColumn:相当
+     * 
+     * 列の移動とリサイズを妨害しないよう、DefaultTableCellRendererを継承した
+     * カスタムヘッダーレンダラーを使用してソートインジケーターを表示
      * 
      * @param sortColumn ソート列の識別子
      * @param ascending 昇順の場合true
@@ -285,6 +475,8 @@ public class DatabaseOutlineView extends JXTreeTable {
         currentSortColumn = sortColumn;
         currentSortAscending = ascending;
         
+        // HOROS-20240407準拠: ソートインジケーターを表示
+        // 列の移動とリサイズを妨害しないよう、DefaultTableCellRendererを継承したカスタムヘッダーレンダラーを使用
         javax.swing.table.TableColumnModel columnModel = getColumnModel();
         javax.swing.table.JTableHeader header = getTableHeader();
         
@@ -292,19 +484,96 @@ public class DatabaseOutlineView extends JXTreeTable {
             return;
         }
         
-        // すべての列のヘッダーレンダラーを更新
+        // すべての列のヘッダーレンダラーを設定（列の移動とリサイズを妨害しない）
         for (int i = 0; i < columnModel.getColumnCount(); i++) {
             javax.swing.table.TableColumn column = columnModel.getColumn(i);
-            // 各列にソート状態を保持したヘッダーレンダラーを設定
-            column.setHeaderRenderer(new SortableHeaderRenderer());
+            Object identifier = column.getIdentifier();
+            String columnId = (identifier != null) ? identifier.toString() : null;
+            
+            // ソート列かどうかを判定
+            boolean isSortColumn = (currentSortColumn != null && columnId != null && 
+                                   currentSortColumn.equals(columnId));
+            
+            if (isSortColumn) {
+                // ソート列の場合、ソートインジケーター付きのヘッダーレンダラーを設定
+                column.setHeaderRenderer(new SortableHeaderRenderer());
+            } else {
+                // ソート列でない場合も、フラットなスタイルのヘッダーレンダラーを使用
+                column.setHeaderRenderer(new FlatHeaderRenderer());
+            }
         }
         
         header.repaint();
     }
     
     /**
+     * フラットなヘッダーレンダラー（ソート列でない場合）
+     * HOROS-20240407準拠: 全てのヘッダーをフラットなスタイルにする
+     */
+    private class FlatHeaderRenderer implements javax.swing.table.TableCellRenderer {
+        
+        @Override
+        public java.awt.Component getTableCellRendererComponent(
+                javax.swing.JTable table, Object value,
+                boolean isSelected, boolean hasFocus,
+                int row, int column) {
+            
+            // ヘッダーテキストを設定
+            String headerText = value != null ? value.toString() : "";
+            
+            // HOROS-20240407準拠: フラットなヘッダースタイル（ボーダーなし）
+            javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout()) {
+                @Override
+                protected void processMouseEvent(java.awt.event.MouseEvent e) {
+                    // HOROS-20240407準拠: 列の移動とリサイズを妨害しないように、イベントを親に転送
+                    java.awt.Component parent = getParent();
+                    if (parent != null) {
+                        java.awt.Point point = javax.swing.SwingUtilities.convertPoint(this, e.getPoint(), parent);
+                        java.awt.event.MouseEvent newEvent = new java.awt.event.MouseEvent(
+                            parent, e.getID(), e.getWhen(), e.getModifiersEx(),
+                            point.x, point.y, e.getClickCount(), e.isPopupTrigger(), e.getButton()
+                        );
+                        parent.dispatchEvent(newEvent);
+                    }
+                }
+                
+                @Override
+                protected void processMouseMotionEvent(java.awt.event.MouseEvent e) {
+                    // HOROS-20240407準拠: 列の移動とリサイズを妨害しないように、イベントを親に転送
+                    java.awt.Component parent = getParent();
+                    if (parent != null) {
+                        java.awt.Point point = javax.swing.SwingUtilities.convertPoint(this, e.getPoint(), parent);
+                        java.awt.event.MouseEvent newEvent = new java.awt.event.MouseEvent(
+                            parent, e.getID(), e.getWhen(), e.getModifiersEx(),
+                            point.x, point.y, e.getClickCount(), e.isPopupTrigger(), e.getButton()
+                        );
+                        parent.dispatchEvent(newEvent);
+                    }
+                }
+            };
+            
+            // HOROS-20240407準拠: フラットなヘッダースタイル（ボーダーなし、背景色のみ）
+            panel.setOpaque(true);
+            panel.setBackground(table.getTableHeader().getBackground());
+            panel.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 5, 2, 5));
+            
+            // ヘッダーテキスト（左寄せ）
+            javax.swing.JLabel textLabel = new javax.swing.JLabel(headerText);
+            textLabel.setForeground(table.getTableHeader().getForeground());
+            textLabel.setFont(table.getTableHeader().getFont());
+            textLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+            panel.add(textLabel, java.awt.BorderLayout.WEST);
+            
+            return panel;
+        }
+    }
+    
+    /**
      * ソート可能なヘッダーレンダラー
      * HOROS-20240407準拠: NSOutlineViewのソートインジケーター表示を再現
+     * 
+     * 列の移動とリサイズを妨害しないよう、JPanelを使用してレイアウトを制御し、
+     * マウスイベントを親に転送する
      */
     private class SortableHeaderRenderer implements javax.swing.table.TableCellRenderer {
         
@@ -323,18 +592,47 @@ public class DatabaseOutlineView extends JXTreeTable {
             boolean isSortColumn = (currentSortColumn != null && columnId != null && 
                                    currentSortColumn.equals(columnId));
             
-            // ヘッダーパネルを作成（テキスト左寄せ、インジケーター右寄せ）
-            javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout());
+            // ヘッダーテキストを設定
+            String headerText = value != null ? value.toString() : "";
+            
+            // HOROS-20240407準拠: フラットなヘッダースタイル（ボーダーなし）
+            javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout()) {
+                @Override
+                protected void processMouseEvent(java.awt.event.MouseEvent e) {
+                    // HOROS-20240407準拠: 列の移動とリサイズを妨害しないように、イベントを親に転送
+                    java.awt.Component parent = getParent();
+                    if (parent != null) {
+                        java.awt.Point point = javax.swing.SwingUtilities.convertPoint(this, e.getPoint(), parent);
+                        java.awt.event.MouseEvent newEvent = new java.awt.event.MouseEvent(
+                            parent, e.getID(), e.getWhen(), e.getModifiersEx(),
+                            point.x, point.y, e.getClickCount(), e.isPopupTrigger(), e.getButton()
+                        );
+                        parent.dispatchEvent(newEvent);
+                    }
+                }
+                
+                @Override
+                protected void processMouseMotionEvent(java.awt.event.MouseEvent e) {
+                    // HOROS-20240407準拠: 列の移動とリサイズを妨害しないように、イベントを親に転送
+                    java.awt.Component parent = getParent();
+                    if (parent != null) {
+                        java.awt.Point point = javax.swing.SwingUtilities.convertPoint(this, e.getPoint(), parent);
+                        java.awt.event.MouseEvent newEvent = new java.awt.event.MouseEvent(
+                            parent, e.getID(), e.getWhen(), e.getModifiersEx(),
+                            point.x, point.y, e.getClickCount(), e.isPopupTrigger(), e.getButton()
+                        );
+                        parent.dispatchEvent(newEvent);
+                    }
+                }
+            };
+            
+            // HOROS-20240407準拠: フラットなヘッダースタイル（ボーダーなし、背景色のみ）
             panel.setOpaque(true);
             panel.setBackground(table.getTableHeader().getBackground());
-            panel.setBorder(javax.swing.BorderFactory.createCompoundBorder(
-                javax.swing.BorderFactory.createEtchedBorder(),
-                javax.swing.BorderFactory.createEmptyBorder(2, 5, 2, 5)
-            ));
+            panel.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 5, 2, 5));
             
             // ヘッダーテキスト（左寄せ）
-            javax.swing.JLabel textLabel = new javax.swing.JLabel();
-            textLabel.setText(value != null ? value.toString() : "");
+            javax.swing.JLabel textLabel = new javax.swing.JLabel(headerText);
             textLabel.setForeground(table.getTableHeader().getForeground());
             textLabel.setFont(table.getTableHeader().getFont());
             textLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
@@ -376,11 +674,19 @@ public class DatabaseOutlineView extends JXTreeTable {
     /**
      * ダブルクリックリスナーを追加
      * HOROS-20240407準拠: databaseDoublePressed:に相当
+     * 
+     * 注意: 列ヘッダーのクリックを除外し、列の移動とリサイズを妨害しない
      */
     private void addDoubleClickListener() {
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                // HOROS-20240407準拠: 列ヘッダーのクリックを除外（列の移動とリサイズを妨害しない）
+                if (e.getSource() instanceof javax.swing.table.JTableHeader) {
+                    return;
+                }
+                
+                // HOROS-20240407準拠: テーブル本体のクリックのみ処理
                 if (e.getClickCount() == 2 && browserController != null) {
                     browserController.databaseDoublePressed(DatabaseOutlineView.this);
                 }
@@ -399,11 +705,123 @@ public class DatabaseOutlineView extends JXTreeTable {
     }
     
     /**
-     * 列ヘッダークリックリスナーを追加
-     * HOROS-20240407準拠: NSOutlineViewが自動的にヘッダークリックを処理し、outlineView:sortDescriptorsDidChange:で検知（6665行目）
-     * Java Swingでは、JXTreeTableが自動的にヘッダークリックを処理する機能を持っていないため、
-     * 手動でリスナーを追加する必要がある（Java/WindowsとObjective-C/macOSの違いを埋めるための最小限のカスタムロジック）
+     * 列の移動を制限（最初の列は移動不可）
+     * HOROS-20240407準拠: 最初の列（階層表示用）は固定され、移動やリサイズができない
      */
+    private void setupColumnReorderingRestrictions() {
+        javax.swing.table.TableColumnModel columnModel = getColumnModel();
+        if (columnModel == null) {
+            return;
+        }
+        
+        // 列移動イベントを監視して、最初の列の移動を防ぐ
+        columnModel.addColumnModelListener(new javax.swing.event.TableColumnModelListener() {
+            @Override
+            public void columnAdded(javax.swing.event.TableColumnModelEvent e) {
+                // 列が追加された後、最初の列を固定
+                fixFirstColumn();
+            }
+            
+            @Override
+            public void columnRemoved(javax.swing.event.TableColumnModelEvent e) {
+                // 列が削除された後、最初の列を固定
+                fixFirstColumn();
+            }
+            
+            @Override
+            public void columnMoved(javax.swing.event.TableColumnModelEvent e) {
+                // 列の復元中はイベントを無視（ループを防ぐため）
+                if (isRestoringColumns) {
+                    return;
+                }
+                
+                // HOROS-20240407準拠: 最初の列（階層表示用）は移動不可
+                // 列が移動された場合、最初の列が移動されていないか確認
+                int fromIndex = e.getFromIndex();
+                int toIndex = e.getToIndex();
+                
+                // 最初の列（インデックス0）が移動された場合、元の位置に戻す
+                if (toIndex == 0 && fromIndex != 0) {
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        try {
+                            columnModel.moveColumn(0, fromIndex);
+                        } catch (Exception ex) {
+                            // エラーが発生した場合は無視
+                        }
+                    });
+                } else if (fromIndex == 0 && toIndex != 0) {
+                    // 最初の列が移動された場合、元の位置に戻す
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        try {
+                            columnModel.moveColumn(toIndex, 0);
+                        } catch (Exception ex) {
+                            // エラーが発生した場合は無視
+                        }
+                    });
+                }
+                
+                // 最初の列を固定
+                fixFirstColumn();
+            }
+            
+            @Override
+            public void columnMarginChanged(javax.swing.event.ChangeEvent e) {
+                // 列のマージンが変更された後、最初の列を固定
+                fixFirstColumn();
+            }
+            
+            @Override
+            public void columnSelectionChanged(javax.swing.event.ListSelectionEvent e) {
+                // 列の選択が変更された場合は何もしない
+            }
+        });
+        
+        // 初期設定で最初の列を固定
+        fixFirstColumn();
+    }
+    
+    /**
+     * 最初の列（階層表示用）を固定
+     * HOROS-20240407準拠: 最初の列は移動不可、リサイズ不可
+     */
+    private void fixFirstColumn() {
+        javax.swing.table.TableColumnModel columnModel = getColumnModel();
+        if (columnModel == null || columnModel.getColumnCount() == 0) {
+            return;
+        }
+        
+        // 最初の列を取得
+        javax.swing.table.TableColumn firstColumn = columnModel.getColumn(0);
+        if (firstColumn != null) {
+            // 最初の列は開閉マーク専用で固定（移動不可、リサイズ不可）
+            firstColumn.setResizable(false);
+            firstColumn.setMinWidth(20); // 開閉マークのみの幅
+            firstColumn.setMaxWidth(20); // 固定幅
+            firstColumn.setPreferredWidth(20);
+            if (firstColumn.getWidth() != 20) {
+                firstColumn.setWidth(20);
+            }
+        }
+    }
+    
+    /**
+     * 列ヘッダークリックリスナーを追加
+     * HOROS-20240407準拠: BrowserController.m 6665行目 - outlineView:sortDescriptorsDidChange:
+     * 
+     * 【カスタムロジックの理由】
+     * - NSOutlineView: 自動的にヘッダークリックでソートし、sortDescriptorsDidChange:を呼び出す
+     * - JXTreeTable: 自動機能がないため、手動でMouseListenerを追加する必要がある
+     * 
+     * 【実装方針】
+     * - HOROS-20240407の動作を可能な限り忠実に再現
+     * - ドラッグ操作（列の移動）を妨害しないよう、MouseMotionListenerで検出
+     * - 右クリック（列メニュー）を妨害しないよう、isPopupTriggerで判定
+     */
+    // HOROS-20240407準拠: 列ヘッダーのドラッグ操作を検出するためのフラグ
+    // 【カスタムロジック】列の移動とソートを区別するため（NSOutlineViewは自動的に処理）
+    private boolean isDraggingColumn = false;
+    private java.awt.Point dragStartPoint = null;
+    
     private void addColumnHeaderClickListener() {
         javax.swing.table.JTableHeader header = getTableHeader();
         if (header == null) {
@@ -411,6 +829,10 @@ public class DatabaseOutlineView extends JXTreeTable {
         }
         
         // HOROS-20240407準拠: 列ヘッダークリックでソート（outlineView:sortDescriptorsDidChange:相当）
+        // NSOutlineViewは標準で列ヘッダークリックでソートし、列の移動とリサイズも標準機能
+        // Java Swingでは、MouseListenerを追加すると標準機能が妨害される可能性があるため、
+        // イベントを消費しないように注意する
+        // 【カスタムロジック】プラットフォーム差を埋めるための必要最小限の実装
         header.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -419,31 +841,90 @@ public class DatabaseOutlineView extends JXTreeTable {
                     return;
                 }
                 
+                // HOROS-20240407準拠: ドラッグ操作（列の移動）の場合はソート処理をスキップ
+                if (isDraggingColumn) {
+                    isDraggingColumn = false;
+                    dragStartPoint = null;
+                    return;
+                }
+                
                 // HOROS-20240407準拠: 左クリックの場合のみソート処理を実行
-                if (browserController != null) {
+                // mouseClickedは、mousePressedとmouseReleasedの後に呼ばれるため、
+                // 列の移動とリサイズが完了した後にのみソート処理を実行
+                if (e.getButton() == MouseEvent.BUTTON1 && e.getClickCount() == 1 && browserController != null) {
                     int columnIndex = header.columnAtPoint(e.getPoint());
                     if (columnIndex >= 0) {
-                        // 列の識別子を取得
-                        javax.swing.table.TableColumn column = header.getColumnModel().getColumn(columnIndex);
-                        Object identifier = column.getIdentifier();
-                        String columnId = identifier != null ? identifier.toString() : null;
-                        
-                        if (columnId != null && !columnId.isEmpty()) {
-                            // 現在のソート状態を確認
-                            boolean ascending = browserController.isSortAscending();
-                            String currentSortColumn = browserController.getSortColumn();
-                            
-                            // 同じ列をクリックした場合は昇順/降順を切り替え
-                            if (columnId.equals(currentSortColumn)) {
-                                ascending = !ascending;
-                            } else {
-                                ascending = true; // 新しい列の場合は昇順から
-                            }
-                            
-                            // HOROS-20240407準拠: outlineView:sortDescriptorsDidChange:相当（6665行目）
-                            // ソートを実行
-                            browserController.setSortColumn(columnId, ascending);
+                        // 列の境界線付近（リサイズ領域）のクリックは除外
+                        int x = e.getPoint().x;
+                        int columnX = 0;
+                        for (int i = 0; i < columnIndex; i++) {
+                            columnX += header.getColumnModel().getColumn(i).getWidth();
                         }
+                        int columnWidth = header.getColumnModel().getColumn(columnIndex).getWidth();
+                        
+                        // 列の左端または右端から3ピクセル以内かどうか
+                        int distanceFromLeft = Math.abs(x - columnX);
+                        int distanceFromRight = Math.abs(x - (columnX + columnWidth));
+                        boolean isNearBorder = distanceFromLeft <= 3 || distanceFromRight <= 3;
+                        
+                        // 列の境界線付近でない場合のみソート処理を実行
+                        if (!isNearBorder) {
+                            // 列の識別子を取得
+                            javax.swing.table.TableColumn column = header.getColumnModel().getColumn(columnIndex);
+                            Object identifier = column.getIdentifier();
+                            String columnId = identifier != null ? identifier.toString() : null;
+                            
+                            if (columnId != null && !columnId.isEmpty()) {
+                                // 現在のソート状態を確認
+                                boolean ascending = browserController.isSortAscending();
+                                String currentSortColumn = browserController.getSortColumn();
+                                
+                                // 同じ列をクリックした場合は昇順/降順を切り替え
+                                if (columnId.equals(currentSortColumn)) {
+                                    ascending = !ascending;
+                                } else {
+                                    ascending = true; // 新しい列の場合は昇順から
+                                }
+                                
+                                // HOROS-20240407準拠: outlineView:sortDescriptorsDidChange:相当（6665行目）
+                                // ソートを実行
+                                browserController.setSortColumn(columnId, ascending);
+                            }
+                        }
+                    }
+                }
+                
+                dragStartPoint = null;
+            }
+            
+            @Override
+            public void mousePressed(MouseEvent e) {
+                // HOROS-20240407準拠: 右クリックの場合は処理をスキップ（列メニューを表示するため）
+                if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
+                    return;
+                }
+                
+                // HOROS-20240407準拠: 左クリックの場合、ドラッグ開始位置を記録
+                // ただし、イベントを消費しないようにする（列の移動とリサイズを妨害しない）
+                if (e.getButton() == MouseEvent.BUTTON1) {
+                    dragStartPoint = e.getPoint();
+                    isDraggingColumn = false;
+                }
+            }
+        });
+        
+        // HOROS-20240407準拠: ドラッグ操作（列の移動）を検出するためのMouseMotionListener
+        header.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(java.awt.event.MouseEvent e) {
+                // HOROS-20240407準拠: ドラッグ操作を検出した場合はフラグを設定
+                // ただし、イベントを消費しないようにする（列の移動とリサイズを妨害しない）
+                if (dragStartPoint != null) {
+                    // ドラッグ開始位置からの移動距離を計算
+                    double distance = dragStartPoint.distance(e.getPoint());
+                    // 5ピクセル以上移動した場合はドラッグ操作（列の移動）とみなす
+                    if (distance > 5) {
+                        isDraggingColumn = true;
                     }
                 }
             }
@@ -453,35 +934,24 @@ public class DatabaseOutlineView extends JXTreeTable {
     /**
      * HOROS-20240407準拠: どのカラムをクリックしても行が選択されるようにする
      * JXTreeTableのchangeSelectionメソッドをオーバーライド
+     * 
+     * 注意: 列ヘッダーの操作（列の移動とリサイズ）を妨害しないため、一旦標準動作に戻す
+     * TODO: 列の移動とリサイズが動作することを確認後、「どのカラムをクリックしても行が選択される」機能を再実装
      */
-    @Override
-    public void changeSelection(int rowIndex, int columnIndex, boolean toggle, boolean extend) {
-        // HOROS-20240407準拠: NSOutlineViewでは、どのカラムをクリックしても行が選択される
-        // 最初のカラム（階層表示用）を指定して行選択を実行
-        
-        // 同じ行をクリックした場合でも、TreeSelectionEventを発火させるために
-        // 一度選択を解除してから再選択する
-        int[] currentSelection = getSelectedRows();
-        boolean isSameRow = (currentSelection.length == 1 && currentSelection[0] == rowIndex);
-        
-        if (isSameRow && columnIndex != 0 && columnIndex != -1) {
-            // 同じ行で、最初のカラム以外をクリックした場合は、選択を更新してイベントを発火させる
-            TreePath path = getPathForRow(rowIndex);
-            if (path != null) {
-                javax.swing.tree.TreeSelectionModel treeSelModel = getTreeSelectionModel();
-                if (treeSelModel != null) {
-                    // 一度選択を解除してから再選択することで、TreeSelectionEventを発火させる
-                    treeSelModel.removeSelectionPath(path);
-                    // 同期的に再選択してイベントを発火させる
-                    treeSelModel.setSelectionPath(path);
-                    return;
-                }
-            }
-        }
-        
-        // 通常の行選択処理（最初のカラムを指定して行選択を実行）
-        super.changeSelection(rowIndex, 0, toggle, extend);
-    }
+    // @Override
+    // public void changeSelection(int rowIndex, int columnIndex, boolean toggle, boolean extend) {
+    //     // HOROS-20240407準拠: 列ヘッダーのクリック（rowIndex < 0 または columnIndex == -1）の場合は標準処理を実行
+    //     // 列の移動とリサイズを妨害しない
+    //     if (rowIndex < 0 || columnIndex == -1) {
+    //         super.changeSelection(rowIndex, columnIndex, toggle, extend);
+    //         return;
+    //     }
+    //     
+    //     // HOROS-20240407準拠: NSOutlineViewでは、どのカラムをクリックしても行が選択される
+    //     // 最初のカラム（階層表示用）を指定して行選択を実行
+    //     // 通常の行選択処理（最初のカラムを指定して行選択を実行）
+    //     super.changeSelection(rowIndex, 0, toggle, extend);
+    // }
     
     /**
      * データを再読み込み
@@ -505,31 +975,59 @@ public class DatabaseOutlineView extends JXTreeTable {
         javax.swing.table.TableColumnModel columnModel = getColumnModel();
         
         // HOROS-20240407準拠: 列が作成されていない場合は、列を作成
+        // 最初の列（インデックス0）は開閉マーク専用、2番目以降がデータ列
+        // ユーザー確認: HOROSでは開閉マークは単独列で、その隣にPatient Name列がある
         if (columnModel.getColumnCount() == 0) {
-            // JXTreeTableでは列が自動的に作成されるが、明示的に列を作成する必要がある場合がある
-            // ここでは列が既に作成されていることを前提とする
-            return;
+            // JXTreeTableでは、最初の列（インデックス0）は階層表示用で自動的に作成される
+            // この列を開閉マーク専用として使用（データは表示しない）
+            
+            // 2番目以降の列（データ列）を手動で作成
+            for (int i = 0; i < COLUMN_NAMES.length; i++) {
+                javax.swing.table.TableColumn column = new javax.swing.table.TableColumn(i + 1); // インデックスは+1（最初の列を除く）
+                column.setIdentifier(COLUMN_IDENTIFIERS[i]);
+                column.setHeaderValue(COLUMN_NAMES[i]);
+                columnModel.addColumn(column);
+            }
         }
         
         // HOROS-20240407準拠: 各列に識別子と幅を設定
-        for (int i = 0; i < COLUMN_WIDTHS.length && i < columnModel.getColumnCount(); i++) {
+        // 最初の列（インデックス0）は開閉マーク専用、2番目以降がデータ列
+        for (int i = 0; i < columnModel.getColumnCount(); i++) {
             javax.swing.table.TableColumn column = columnModel.getColumn(i);
             
-            // HOROS-20240407準拠: 列の識別子を設定（カラム状態の保存/復元に使用）
-            if (i < COLUMN_IDENTIFIERS.length) {
-                column.setIdentifier(COLUMN_IDENTIFIERS[i]);
+            // HOROS-20240407準拠: 最初の列（インデックス0）は開閉マーク専用で固定
+            if (i == 0) {
+                // 最初の列は移動不可、リサイズ不可（開閉マーク専用）
+                column.setResizable(false);
+                column.setMinWidth(20); // 開閉マークのみの幅
+                column.setMaxWidth(20); // 固定幅
+                column.setPreferredWidth(20);
+                column.setWidth(20);
+                // 識別子は設定しない（開閉マーク専用のため）
+                column.setHeaderValue(""); // ヘッダーなし
+            } else {
+                // 2番目以降の列（データ列）に識別子と幅を設定
+                int dataColumnIndex = i - 1; // データ列のインデックス（最初の列を除く）
+                if (dataColumnIndex < COLUMN_IDENTIFIERS.length) {
+                    column.setIdentifier(COLUMN_IDENTIFIERS[dataColumnIndex]);
+                }
+                if (dataColumnIndex < COLUMN_NAMES.length) {
+                    column.setHeaderValue(COLUMN_NAMES[dataColumnIndex]);
+                }
+                if (dataColumnIndex < COLUMN_WIDTHS.length) {
+                    column.setMinWidth(COLUMN_MIN_WIDTHS[dataColumnIndex]);
+                    column.setMaxWidth(COLUMN_MAX_WIDTHS[dataColumnIndex]);
+                    column.setPreferredWidth(COLUMN_WIDTHS[dataColumnIndex]);
+                    column.setResizable(true);
+                    column.setWidth(COLUMN_WIDTHS[dataColumnIndex]);
+                }
             }
-            
-            // HOROS-20240407準拠: 列のヘッダー名を設定
-            if (i < COLUMN_NAMES.length) {
-                column.setHeaderValue(COLUMN_NAMES[i]);
-            }
-            
-            // HOROS-20240407準拠: 列幅を設定（リサイズ可能）
-            column.setMinWidth(COLUMN_MIN_WIDTHS[i]);
-            column.setMaxWidth(COLUMN_MAX_WIDTHS[i]);
-            column.setPreferredWidth(COLUMN_WIDTHS[i]);
-            column.setResizable(true); // ユーザーが列幅を調整できるようにする
+        }
+        
+        // 列の移動を有効にする（applyColumnWidths()の後に設定）
+        javax.swing.table.JTableHeader header = getTableHeader();
+        if (header != null) {
+            header.setReorderingAllowed(true);
         }
         
         revalidate();
@@ -539,7 +1037,8 @@ public class DatabaseOutlineView extends JXTreeTable {
     /**
      * カラム状態を取得（保存用）
      * HOROS-20240407準拠: MyOutlineView.m 68-82行目 - (NSObject<NSCoding>*)columnState
-     * HOROS-20240407準拠: 列の順序（位置）も保存する（Java/WindowsとObjective-C/macOSの違いを埋めるための最小限のカスタムロジック）
+     * HOROS-20240407準拠: BrowserController.m 11646行目 - moveColumn:toColumn:で列の順序を復元
+     * 【カスタムロジック】NSOutlineViewはautosaveColumnsで自動保存、Java Swingでは手動実装が必要
      * 
      * @return カラム状態（識別子、幅、順序のマップのリスト）
      */
@@ -547,16 +1046,24 @@ public class DatabaseOutlineView extends JXTreeTable {
         List<Map<String, Object>> state = new ArrayList<>();
         javax.swing.table.TableColumnModel columnModel = getColumnModel();
         
+        // HOROS-20240407準拠: 最初の列（インデックス0）は開閉マーク専用列で、識別子がないため保存しない
+        // 2番目以降の列（データ列）のみを保存する
         for (int i = 0; i < columnModel.getColumnCount(); i++) {
             javax.swing.table.TableColumn column = columnModel.getColumn(i);
             Object identifier = column.getIdentifier();
+            
+            // 最初の列（開閉マーク専用列）はスキップ
+            if (i == 0) {
+                continue;
+            }
             
             // 非表示のカラムは除外（幅が0の場合は非表示とみなす）
             if (identifier != null && column.getWidth() > 0) {
                 Map<String, Object> columnInfo = new HashMap<>();
                 columnInfo.put("Identifier", identifier.toString());
                 columnInfo.put("Width", column.getPreferredWidth());
-                // HOROS-20240407準拠: 列の順序（位置）を保存（Java Swingでは明示的に保存する必要がある）
+                // HOROS-20240407準拠: 列の順序（位置）を保存（実際の表示位置を保存）
+                // 最初の列（開閉マーク専用列）を考慮して、実際の表示位置を保存
                 columnInfo.put("Index", i);
                 state.add(columnInfo);
             }
@@ -568,7 +1075,8 @@ public class DatabaseOutlineView extends JXTreeTable {
     /**
      * カラム状態を復元
      * HOROS-20240407準拠: MyOutlineView.m 84-111行目 - (void)restoreColumnState:(NSArray*)state
-     * HOROS-20240407準拠: 列の順序（位置）も復元する（Java/WindowsとObjective-C/macOSの違いを埋めるための最小限のカスタムロジック）
+     * HOROS-20240407準拠: BrowserController.m 11646行目 - moveColumn:toColumn:で列の順序を復元
+     * 【カスタムロジック】NSOutlineViewはautosaveColumnsで自動復元、Java Swingでは手動実装が必要
      * 
      * @param state カラム状態（識別子、幅、順序のマップのリスト）
      */
@@ -581,6 +1089,12 @@ public class DatabaseOutlineView extends JXTreeTable {
         if (columnModel == null) {
             return;
         }
+        
+        // 列の復元中フラグを設定（columnMovedイベントを無視するため）
+        isRestoringColumns = true;
+        
+        // 最初の列（開閉マーク専用列）を確実に固定（復元前に固定）
+        fixFirstColumn();
         
         // HOROS-20240407準拠: まず列の幅を復元
         for (Map<String, Object> params : state) {
@@ -604,78 +1118,142 @@ public class DatabaseOutlineView extends JXTreeTable {
                 continue;
             }
             
-            // nameカラムの場合は特別処理（最初のカラム）
-            if (COL_NAME.equals(identifier)) {
-                if (columnModel.getColumnCount() > 0) {
-                    javax.swing.table.TableColumn nameColumn = columnModel.getColumn(0);
-                    nameColumn.setPreferredWidth(width);
-                }
-            } else {
-                // 識別子でカラムを検索
-                for (int i = 0; i < columnModel.getColumnCount(); i++) {
-                    javax.swing.table.TableColumn column = columnModel.getColumn(i);
-                    Object colIdentifier = column.getIdentifier();
-                    
-                    if (identifier.equals(colIdentifier != null ? colIdentifier.toString() : "")) {
-                        column.setPreferredWidth(width);
-                        // カラムを表示（幅が0より大きい場合は表示）
-                        if (width > 0) {
-                            column.setWidth(width);
-                        }
-                        break;
+            // HOROS-20240407準拠: 最初の列（インデックス0）は開閉マーク専用列で、識別子がない
+            // nameカラム（Patient Name列）は2番目以降の列にあるため、識別子で検索する
+            // 識別子でカラムを検索
+            for (int i = 0; i < columnModel.getColumnCount(); i++) {
+                javax.swing.table.TableColumn column = columnModel.getColumn(i);
+                Object colIdentifier = column.getIdentifier();
+                
+                if (identifier.equals(colIdentifier != null ? colIdentifier.toString() : "")) {
+                    column.setPreferredWidth(width);
+                    // カラムを表示（幅が0より大きい場合は表示）
+                    if (width > 0) {
+                        column.setWidth(width);
                     }
+                    break;
                 }
             }
         }
         
         // HOROS-20240407準拠: 列の順序（位置）を復元
         // 保存された順序に従って列を並び替える
-        // nameカラムは常に最初の位置に固定
-        List<Map<String, Object>> sortedState = new ArrayList<>(state);
-        sortedState.sort((a, b) -> {
-            // nameカラムは常に最初
-            String idA = (String) a.get("Identifier");
-            String idB = (String) b.get("Identifier");
-            if (COL_NAME.equals(idA)) return -1;
-            if (COL_NAME.equals(idB)) return 1;
-            
-            // その他の列は保存されたIndex順
-            Object indexA = a.get("Index");
-            Object indexB = b.get("Index");
-            if (indexA instanceof Number && indexB instanceof Number) {
-                return Integer.compare(((Number) indexA).intValue(), ((Number) indexB).intValue());
-            }
-            return 0;
-        });
+        // 最初の列（インデックス0）は開閉マーク専用列で固定、2番目以降の列を復元
         
-        // 列の順序を復元（nameカラムを除く）
-        for (int targetIndex = 1; targetIndex < sortedState.size(); targetIndex++) {
-            Map<String, Object> params = sortedState.get(targetIndex);
+        // まず、すべての列の現在位置を取得
+        Map<String, Integer> currentPositions = new HashMap<>();
+        for (int i = 0; i < columnModel.getColumnCount(); i++) {
+            javax.swing.table.TableColumn column = columnModel.getColumn(i);
+            Object colIdentifier = column.getIdentifier();
+            if (colIdentifier != null) {
+                currentPositions.put(colIdentifier.toString(), i);
+            }
+        }
+        
+        // 保存された状態から、目標位置と現在位置のマッピングを作成
+        List<Map<String, Object>> moveOperations = new ArrayList<>();
+        for (Map<String, Object> params : state) {
             String identifier = (String) params.get("Identifier");
-            
-            if (identifier == null || COL_NAME.equals(identifier)) {
+            if (identifier == null) {
                 continue;
             }
             
-            // 識別子でカラムを検索
-            int currentIndex = -1;
-            for (int i = 0; i < columnModel.getColumnCount(); i++) {
-                javax.swing.table.TableColumn column = columnModel.getColumn(i);
-                Object colIdentifier = column.getIdentifier();
-                if (identifier.equals(colIdentifier != null ? colIdentifier.toString() : "")) {
-                    currentIndex = i;
-                    break;
+            // 保存されたIndex（目標位置）を取得
+            Object indexObj = params.get("Index");
+            int targetIndex = -1;
+            if (indexObj instanceof Number) {
+                targetIndex = ((Number) indexObj).intValue();
+            } else if (indexObj instanceof String) {
+                try {
+                    targetIndex = Integer.parseInt((String) indexObj);
+                } catch (NumberFormatException e) {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+            
+            // 現在位置を取得
+            Integer currentIndex = currentPositions.get(identifier);
+            if (currentIndex != null && targetIndex > 0 && currentIndex != targetIndex) {
+                Map<String, Object> moveOp = new HashMap<>();
+                moveOp.put("identifier", identifier);
+                moveOp.put("currentIndex", currentIndex);
+                moveOp.put("targetIndex", targetIndex);
+                moveOperations.add(moveOp);
+            }
+        }
+        
+        // HOROS-20240407準拠: 列の移動を目標位置の昇順（小さい順）で行う
+        // これにより、前の列から順に移動するため、後続の列の位置に影響を与えない
+        // ただし、各移動後に現在位置を更新する必要がある
+        moveOperations.sort((a, b) -> {
+            int targetA = (Integer) a.get("targetIndex");
+            int targetB = (Integer) b.get("targetIndex");
+            return Integer.compare(targetA, targetB); // 昇順
+        });
+        
+        // 列を目標位置の昇順で移動（各移動後に現在位置を更新）
+        // すべての列が正しい位置に移動するまで繰り返す（最大10回）
+        int maxIterations = 10;
+        for (int iteration = 0; iteration < maxIterations; iteration++) {
+            boolean allCorrect = true;
+            
+            for (Map<String, Object> moveOp : moveOperations) {
+                String identifier = (String) moveOp.get("identifier");
+                int targetIndex = (Integer) moveOp.get("targetIndex");
+                
+                // 現在位置を再取得（前の移動によって位置が変わっている可能性があるため）
+                Integer currentIndex = null;
+                for (int i = 0; i < columnModel.getColumnCount(); i++) {
+                    javax.swing.table.TableColumn column = columnModel.getColumn(i);
+                    Object colIdentifier = column.getIdentifier();
+                    if (identifier.equals(colIdentifier != null ? colIdentifier.toString() : "")) {
+                        currentIndex = i;
+                        break;
+                    }
+                }
+                
+                // 最初の列（インデックス0）は開閉マーク専用列で固定のため、移動しない
+                // また、最初の列（インデックス0）に移動しようとしている列も除外する
+                if (currentIndex != null && targetIndex > 0 && currentIndex != targetIndex && currentIndex != 0) {
+                    allCorrect = false;
+                    try {
+                        columnModel.moveColumn(currentIndex, targetIndex);
+                    } catch (IllegalArgumentException e) {
+                        // 移動に失敗した場合はスキップ（列が存在しない、または範囲外）
+                    }
                 }
             }
             
-            // 列が見つかり、現在の位置が目標位置と異なる場合は移動
-            if (currentIndex >= 0 && currentIndex != targetIndex) {
-                try {
-                    columnModel.moveColumn(currentIndex, targetIndex);
-                } catch (IllegalArgumentException e) {
-                    // 移動に失敗した場合はスキップ（列が存在しない、または範囲外）
-                }
+            // すべての列が正しい位置にある場合は終了
+            if (allCorrect) {
+                break;
             }
+        }
+        
+        // HOROS-20240407準拠: 列の移動とリサイズを確実に有効にする
+        javax.swing.table.JTableHeader header = getTableHeader();
+        if (header != null) {
+            header.setReorderingAllowed(true);
+        }
+        // すべての列のリサイズを有効にする
+        for (int i = 0; i < columnModel.getColumnCount(); i++) {
+            javax.swing.table.TableColumn column = columnModel.getColumn(i);
+            column.setResizable(true);
+        }
+        
+        // 列の復元完了（columnMovedイベントを再度有効化）
+        isRestoringColumns = false;
+        
+        // 最初の列を固定（復元後に確実に固定する）
+        // 最初の列が正しく開閉マーク専用列であることを確認
+        fixFirstColumn();
+        
+        // 最初の列に識別子が設定されている場合は削除（開閉マーク専用列のため）
+        javax.swing.table.TableColumn firstColumn = columnModel.getColumn(0);
+        if (firstColumn != null && firstColumn.getIdentifier() != null) {
+            firstColumn.setIdentifier(null);
         }
         
         revalidate();
@@ -883,6 +1461,7 @@ public class DatabaseOutlineView extends JXTreeTable {
     public static class DatabaseOutlineTreeTableModel extends AbstractTreeTableModel {
         
         private BrowserController browserController;
+        private DatabaseOutlineView outlineView; // HOROS-20240407準拠: 列の識別子を取得するため
         private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm");
         private static final DateTimeFormatter DATE_ONLY_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd");
         
@@ -891,14 +1470,69 @@ public class DatabaseOutlineView extends JXTreeTable {
             this.browserController = browserController;
         }
         
+        /**
+         * DatabaseOutlineViewへの参照を設定
+         * HOROS-20240407準拠: 列が移動された場合でも正しい識別子を取得するため
+         * 
+         * 【カスタムロジックの理由】
+         * - NSOutlineView: tableColumnWithIdentifier:で識別子から列を取得可能
+         * - JXTreeTable: 列移動後も正しい識別子を取得するため、TableColumnModelへのアクセスが必要
+         * 
+         * 【実装方針】
+         * - TreeTableModelから直接TableColumnModelにアクセスできないため、参照を保持
+         * - 列移動後もCOLUMN_IDENTIFIERS[column]ではなく、実際の列の識別子を使用
+         */
+        public void setOutlineView(DatabaseOutlineView outlineView) {
+            this.outlineView = outlineView;
+        }
+        
         @Override
         public int getColumnCount() {
-            return COLUMN_NAMES.length;
+            // HOROS-20240407準拠: 開閉マーク専用列 + データ列
+            // 最初の列（インデックス0）は開閉マーク専用、2番目以降がデータ列
+            // ユーザー確認: HOROSでは開閉マークは単独列で、その隣にPatient Name列がある
+            return COLUMN_NAMES.length + 1; // 開閉マーク専用列を追加
         }
         
         @Override
         public String getColumnName(int column) {
-            return COLUMN_NAMES[column];
+            // HOROS-20240407準拠: 最初の列（インデックス0）は開閉マーク専用
+            if (column == 0) {
+                return ""; // 開閉マーク専用列はヘッダーなし
+            }
+            
+            // 2番目以降の列はデータ列（column-1がデータ列のインデックス）
+            int dataColumnIndex = column - 1;
+            
+            // HOROS-20240407準拠: 列が移動された場合でも正しい列名を取得するため、
+            // TableColumnModelから直接識別子を取得して列名を返す
+            // 【重要】columnパラメータはモデルインデックス（TreeTableModelの列インデックス）
+            // 表示インデックス（view index）に変換する必要がある
+            if (outlineView != null) {
+                javax.swing.table.TableColumnModel columnModel = outlineView.getColumnModel();
+                if (columnModel != null) {
+                    // モデルインデックスを表示インデックスに変換
+                    int viewColumn = outlineView.convertColumnIndexToView(column);
+                    if (viewColumn >= 0 && viewColumn < columnModel.getColumnCount()) {
+                        javax.swing.table.TableColumn tableColumn = columnModel.getColumn(viewColumn);
+                        Object identifier = tableColumn.getIdentifier();
+                        if (identifier != null) {
+                            String columnId = identifier.toString();
+                            // 識別子から列名を取得
+                            for (int i = 0; i < COLUMN_IDENTIFIERS.length; i++) {
+                                if (COLUMN_IDENTIFIERS[i].equals(columnId)) {
+                                    return COLUMN_NAMES[i];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // フォールバック: 配列インデックスを使用（列が移動されていない場合）
+            if (dataColumnIndex >= 0 && dataColumnIndex < COLUMN_NAMES.length) {
+                return COLUMN_NAMES[dataColumnIndex];
+            }
+            return "";
         }
         
         @Override
@@ -911,9 +1545,43 @@ public class DatabaseOutlineView extends JXTreeTable {
         
         @Override
         public Object getValueAt(Object node, int column) {
-            if (node == null || column < 0 || column >= COLUMN_IDENTIFIERS.length) return "";
+            if (node == null || column < 0) return "";
             
-            String columnId = COLUMN_IDENTIFIERS[column];
+            // HOROS-20240407準拠: 最初の列（インデックス0）は開閉マーク専用でデータは表示しない
+            if (column == 0) {
+                return ""; // 開閉マーク専用列はデータを返さない
+            }
+            
+            // 2番目以降の列はデータ列（column-1がデータ列のインデックス）
+            int dataColumnIndex = column - 1;
+            
+            // HOROS-20240407準拠: 列が移動された場合でも正しい識別子を取得するため、
+            // TableColumnModelから直接識別子を取得
+            // 【重要】columnパラメータはモデルインデックス（TreeTableModelの列インデックス）
+            // 表示インデックス（view index）に変換する必要がある
+            String columnId = null;
+            if (outlineView != null) {
+                // HOROS-20240407準拠: 列が移動された場合でも正しい識別子を取得
+                javax.swing.table.TableColumnModel columnModel = outlineView.getColumnModel();
+                if (columnModel != null) {
+                    // モデルインデックスを表示インデックスに変換
+                    int viewColumn = outlineView.convertColumnIndexToView(column);
+                    if (viewColumn >= 0 && viewColumn < columnModel.getColumnCount()) {
+                        javax.swing.table.TableColumn tableColumn = columnModel.getColumn(viewColumn);
+                        Object identifier = tableColumn.getIdentifier();
+                        columnId = identifier != null ? identifier.toString() : null;
+                    }
+                }
+            }
+            
+            // フォールバック: 配列インデックスを使用（列が移動されていない場合）
+            if (columnId == null || columnId.isEmpty()) {
+                if (dataColumnIndex >= 0 && dataColumnIndex < COLUMN_IDENTIFIERS.length) {
+                    columnId = COLUMN_IDENTIFIERS[dataColumnIndex];
+                } else {
+                    return "";
+                }
+            }
             
             // HOROS-20240407準拠: intOutlineView:objectValueForTableColumn:byItem:
             if (node instanceof DicomStudy) {
@@ -1005,7 +1673,9 @@ public class DatabaseOutlineView extends JXTreeTable {
                     return study.getStudyName() != null ? study.getStudyName() : "";
                     
                 case COL_MODALITY:
-                    return study.getModality() != null ? study.getModality() : "";
+                    // HOROS-20240407準拠: modalities()メソッドでSeriesから集約されたモダリティを取得
+                    String modalities = study.modalities();
+                    return modalities != null && !modalities.isEmpty() ? modalities : "";
                     
                 case COL_ID:
                     // HOROS-20240407準拠: 画像数
@@ -1215,6 +1885,138 @@ public class DatabaseOutlineView extends JXTreeTable {
          */
         public void fireTreeStructureChanged() {
             modelSupport.fireTreeStructureChanged(new TreePath(getRoot()));
+        }
+    }
+    
+    /**
+     * 履歴パネルに表示されているスタディと同じ患者UIDを持つDBリスト行の背景色を変更するセルレンダラー
+     * HOROS-20240407準拠: BrowserController.m 6739-6756行目 - willDisplayCell
+     * HOROS-20240407準拠: displaySamePatientWithColorBackground設定を確認し、comparativePatientUIDと比較
+     * HOROS-20240407準拠: name列（最初の列）のみで背景色を設定（6739行目）
+     */
+    private class ComparativePatientCellRenderer extends javax.swing.table.DefaultTableCellRenderer {
+        @Override
+        public java.awt.Component getTableCellRendererComponent(
+                javax.swing.JTable table, Object value,
+                boolean isSelected, boolean hasFocus,
+                int row, int column) {
+            
+            javax.swing.JLabel label = (javax.swing.JLabel) super.getTableCellRendererComponent(
+                    table, value, isSelected, hasFocus, row, column);
+            
+            // HOROS-20240407準拠: BrowserController.m 6739-6756行目
+            // displaySamePatientWithColorBackground設定を確認（デフォルトはtrueと仮定）
+            // HOROS-20240407準拠: 選択されていない行で、previousItem（選択された行）の患者UIDと一致する場合のみ背景色を変更
+            // HOROS-20240407準拠: BrowserController.m 6743-6753行目
+            // if( [[previousItem valueForKey: @"type"] isEqualToString:@"Study]])
+            // {
+            //     NSString *uid = [item valueForKey: @"patientUID"];
+            //     if( previousItem != item && [uid length] > 1 && [uid compare: [previousItem valueForKey: @"patientUID"] options: NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch | NSWidthInsensitiveSearch] == NSOrderedSame)
+            //     {
+            //         [cell setDrawsBackground: YES];
+            //         [cell setBackgroundColor: [NSColor disabledControlTextColor]];
+            //     }
+            // }
+            // HOROS-20240407準拠: name列（識別子が"name"の列）のみで背景色を設定（6739行目）
+            // 列が移動した場合でも正しい列を識別するため、識別子で判定
+            // 最初の列（開閉マーク専用列）ではハイライトを適用しない
+            if (column == 0) {
+                // 最初の列は開閉マーク専用で、ハイライトを適用しない
+                return label;
+            }
+            
+            javax.swing.table.TableColumn tableColumn = table.getColumnModel().getColumn(column);
+            Object columnIdentifier = tableColumn != null ? tableColumn.getIdentifier() : null;
+            // COL_NAME定数を使用して比較（"name"）
+            boolean isNameColumn = columnIdentifier != null && (COL_NAME.equals(columnIdentifier.toString()) || "name".equals(columnIdentifier.toString()));
+            
+            if (isNameColumn && !isSelected && browserController != null) {
+                // HOROS-20240407準拠: BrowserController.m 6743行目
+                // displaySamePatientWithColorBackground設定を確認（デフォルトはtrueと仮定）
+                // TODO: NSUserDefaultsから取得（現在はデフォルトtrueと仮定）
+                boolean displaySamePatientWithColorBackground = true;
+                
+                // HOROS-20240407準拠: BrowserController.m 6743行目
+                // [[self window] firstResponder] == outlineView でウィンドウがフォーカスされているか確認
+                // Java Swingでは、ウィンドウがアクティブであればフォーカスされているとみなす
+                boolean isFocused = true; // フォーカスチェックを緩和（ウィンドウがアクティブであれば表示）
+                
+                if (displaySamePatientWithColorBackground && isFocused) {
+                    // HOROS-20240407準拠: BrowserController.m 6745行目
+                    // if( [[previousItem valueForKey: @"type"] isEqualToString:@"Study]])
+                    Object previousItem = browserController.getPreviousItem();
+                    if (previousItem != null && previousItem instanceof com.jj.dicomviewer.model.DicomStudy) {
+                        // 現在の行のアイテムを取得
+                        // HOROS-20240407準拠: JXTreeTableではgetPathForRowを使用
+                        try {
+                            TreePath path = DatabaseOutlineView.this.getPathForRow(row);
+                            if (path != null) {
+                                Object item = path.getLastPathComponent();
+                                
+                                // HOROS-20240407準拠: BrowserController.m 6749行目
+                                // previousItem != item で選択行自体は除外
+                                // オブジェクトの同一性をチェック（equalsではなく==）
+                                boolean isSameItem = (previousItem == item) || 
+                                                    (previousItem.equals(item));
+                                
+                                if (!isSameItem) {
+                                    // 現在の行のアイテムがStudyタイプか、Studyを含むか確認
+                                    com.jj.dicomviewer.model.DicomStudy currentStudy = null;
+                                    if (item instanceof com.jj.dicomviewer.model.DicomStudy) {
+                                        currentStudy = (com.jj.dicomviewer.model.DicomStudy) item;
+                                    } else if (item instanceof com.jj.dicomviewer.model.DicomSeries) {
+                                        currentStudy = ((com.jj.dicomviewer.model.DicomSeries) item).getStudy();
+                                    } else if (item instanceof com.jj.dicomviewer.model.DicomImage) {
+                                        com.jj.dicomviewer.model.DicomSeries series = ((com.jj.dicomviewer.model.DicomImage) item).getSeries();
+                                        if (series != null) {
+                                            currentStudy = series.getStudy();
+                                        }
+                                    }
+                                    
+                                    if (currentStudy != null) {
+                                        String patientUID = currentStudy.getPatientUID();
+                                        com.jj.dicomviewer.model.DicomStudy previousStudy = (com.jj.dicomviewer.model.DicomStudy) previousItem;
+                                        String previousPatientUID = previousStudy.getPatientUID();
+                                        
+                                        // HOROS-20240407準拠: BrowserController.m 6749行目
+                                        // 大文字小文字を区別せず、アクセント記号を無視して比較
+                                        // [uid length] > 1 のチェック
+                                        if (patientUID != null && patientUID.length() > 1 && 
+                                            previousPatientUID != null && previousPatientUID.length() > 1 &&
+                                            patientUID.equalsIgnoreCase(previousPatientUID)) {
+                                            // HOROS-20240407準拠: BrowserController.m 6751-6752行目
+                                            // [cell setDrawsBackground: YES];
+                                            // [cell setBackgroundColor: [NSColor disabledControlTextColor]];
+                                            label.setOpaque(true);
+                                            // HOROS-20240407準拠: 薄いグレーの背景色を設定
+                                            // 薄いグレー（RGB: 220, 220, 220）を使用
+                                            java.awt.Color highlightColor = new java.awt.Color(220, 220, 220);
+                                            label.setBackground(highlightColor);
+                                            return label;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            // エラーが発生した場合は通常の背景色を使用
+                        }
+                    }
+                }
+            }
+            
+            // HOROS-20240407準拠: 選択行は行全体がハイライト
+            if (isSelected) {
+                label.setOpaque(true);
+                label.setBackground(table.getSelectionBackground());
+                return label;
+            }
+            
+            // HOROS-20240407準拠: UID一致の場合はPatient Name列のみがハイライト
+            // 一致しない場合は通常の背景色（透明）
+            label.setOpaque(false);
+            label.setBackground(table.getBackground());
+            
+            return label;
         }
     }
 }

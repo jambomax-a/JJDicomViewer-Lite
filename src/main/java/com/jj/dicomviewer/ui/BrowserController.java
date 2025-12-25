@@ -22,12 +22,10 @@ import java.util.Map;
 import java.util.prefs.Preferences;
 
 import javax.swing.JFrame;
-import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSplitPane;
-import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
@@ -41,59 +39,62 @@ import com.jj.dicomviewer.threads.ThreadsManager;
  * HOROS-20240407のBrowserControllerをJava Swingに移植
  */
 public class BrowserController extends JFrame {
-
+    
     // HOROS-20240407準拠: static BrowserController *browserWindow = nil; (170行目)
     private static BrowserController browserWindow = null;
-
+    
     // HOROS-20240407準拠: DicomDatabase* _database; (80行目)
     private DicomDatabase database;
-
+    
     // HOROS-20240407準拠: BrowserMatrix *oMatrix; (BrowserController.h)
     private BrowserMatrix oMatrix;
-
+    
     // HOROS-20240407準拠: MyOutlineView *databaseOutline; (BrowserController.h)
     private DatabaseOutlineView databaseOutline;
-
+    
     // HOROS-20240407準拠: BrowserActivityHelper *_activityHelper;
     // (BrowserController+Activity.h)
     private BrowserActivityHelper activityHelper;
-
+    
     // ========== UI関連フィールド（HOROS-20240407準拠） ==========
     // HOROS-20240407準拠: BrowserController.h から主要なフィールドを復元
-
+    
     // HOROS-20240407準拠: NSMutableArray *previewPix, *previewPixThumbnails; (93行目)
     private List<com.jj.dicomviewer.model.DicomPix> previewPix;
     private List<javax.swing.ImageIcon> previewPixThumbnails;
-
+    
     // HOROS-20240407準拠: long loadPreviewIndex, previousNoOfFiles; (106行目)
     private long loadPreviewIndex = 0;
     private long previousNoOfFiles = 0;
-
+    
     // HOROS-20240407準拠: NSManagedObject *previousItem; (107行目)
     private Object previousItem;
-
+    
     // HOROS-20240407準拠: BOOL setDCMDone, dontUpdatePreviewPane; (114行目)
     private boolean setDCMDone = false;
     private boolean dontUpdatePreviewPane = false;
-
+    
     // HOROS-20240407準拠: NSArray *matrixViewArray; (125行目)
     private List<Object> matrixViewArray;
-
+    
     // HOROS-20240407準拠: IBOutlet NSSlider *animationSlider; (142行目)
     private javax.swing.JSlider animationSlider;
-
+    
     // HOROS-20240407準拠: IBOutlet PreviewView *imageView; (146行目)
     private PreviewView imageView;
-
+    
     // HOROS-20240407準拠: IBOutlet NSTableView *albumTable; (133行目)
-    private javax.swing.JTable albumTable;
-
+    private AlbumTableView albumTable;
+    
+    // HOROS-20240407準拠: IBOutlet NSTableView *_sourcesTableView; (138行目)
+    private javax.swing.JTable sourcesTableView;
+    
     // HOROS-20240407準拠: IBOutlet NSTableView *comparativeTable; (270行目)
     private javax.swing.JTable comparativeTable;
 
     // HOROS-20240407準拠: NSMenu *columnsMenu; (BrowserController.h 131行目)
     private javax.swing.JPopupMenu columnsMenu;
-
+    
     // HOROS-20240407準拠: IBOutlet NSSearchField *searchField; (180行目)
     private javax.swing.JTextField searchField;
 
@@ -108,64 +109,67 @@ public class BrowserController extends JFrame {
     
     // HOROS-20240407準拠: IBOutlet NSSplitView *splitComparative; (BrowserController.h 111行目)
     private JSplitPane splitComparative;
-
+    
     // HOROS-20240407準拠: BOOL loadingIsOver = NO; (BrowserController.m 174行目)
     private boolean loadingIsOver = false;
-
+    
     // HOROS-20240407準拠: BOOL DatabaseIsEdited; (201行目)
     private boolean DatabaseIsEdited = false;
-
+    
     // HOROS-20240407準拠: NSThread *matrixLoadIconsThread; (262行目)
     private Thread matrixLoadIconsThread;
-
+    
     // HOROS-20240407準拠: BOOL withReset; (プレビューリセットフラグ)
     private boolean withReset = false;
-
+    
     // HOROS-20240407準拠: NSString *comparativePatientUID; (267行目)
     private String comparativePatientUID;
-
+    
     // HOROS-20240407準拠: NSArray *comparativeStudies; (269行目)
     private List<Object> comparativeStudies;
-
+    
     // HOROS-20240407準拠: BOOL _computingNumberOfStudiesForAlbums; (253行目)
     private boolean _computingNumberOfStudiesForAlbums = false;
-
+    
     // 無限ループ防止フラグ
     private boolean isRefreshingOutline = false;
     private boolean isRefreshingAlbums = false;
     private boolean isUpdatingAlbumTable = false;
-
+    
+    // ディバイダー位置の復元が完了したかどうか（一度だけ実行するため）
+    private boolean dividerLocationsRestored = false;
+    
     // HOROS-20240407準拠: id oFirstForFirst; (dbObjectSelection enum)
     private Object oFirstForFirst;
-
+    
     // HOROS-20240407準拠: NSImage *notFoundImage; (230行目)
     private javax.swing.ImageIcon notFoundImage;
-
+    
     /**
      * コンストラクタ
      * HOROS-20240407準拠: - (id)init (BrowserController.m)
      */
     public BrowserController() {
         super("JJDicomViewer");
-
+        
         // HOROS-20240407準拠: browserWindow = self; (BrowserController.m)
         browserWindow = this;
-
+        
         // HOROS-20240407準拠: _database = [DicomDatabase activeLocalDatabase];
         // (BrowserController.m)
         this.database = DicomDatabase.activeLocalDatabase();
-
+        
         // HOROS-20240407準拠: フィールドの初期化
         this.previewPix = new ArrayList<>();
         this.previewPixThumbnails = new ArrayList<>();
         this.matrixViewArray = new ArrayList<>();
         this.comparativeStudies = new ArrayList<>();
         this.notFoundImage = new javax.swing.ImageIcon(); // TODO: 実際のnotFoundImageを設定
-
+        
         // UI初期化
         initializeUIComponents();
     }
-
+    
     /**
      * UIコンポーネントの初期化
      * HOROS-20240407準拠: - (void)awakeFromNib (BrowserController.m 14164行目)
@@ -208,10 +212,10 @@ public class BrowserController extends JFrame {
 
         // HOROS-20240407準拠: MainMenu.xibからメニューバーを実装
         initializeMenuBar();
-
+        
         Container contentPane = getContentPane();
         contentPane.setLayout(new BorderLayout());
-
+        
         // ========== 左側サイドバー（垂直スプリッター） ==========
         // HOROS-20240407準拠: splitAlbums - Albums | Sources | Activity
         // HOROS-20240407準拠: BrowserController.h 111行目 IBOutlet NSSplitView
@@ -221,11 +225,14 @@ public class BrowserController extends JFrame {
         // Java SwingのJSplitPaneは2分割しかできないため、入れ子構造にする必要がある
         splitAlbums = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         splitAlbums.setName("splitAlbums"); // 検索用に名前を設定
-
+        
         // Albums（上）
         // HOROS-20240407準拠: BrowserController.h 133行目 IBOutlet NSTableView *albumTable;
         // HOROS-20240407準拠: MainMenu.xib 4082行目 - box id="11696" (Albums)
         // HOROS-20240407準拠: MainMenu.xib 4104行目 - tableHeaderCell title="Albums"
+        // HOROS-20240407準拠: AlbumTableViewを使用
+        albumTable = new AlbumTableView(this);
+        // HOROS-20240407準拠: 2列モデル（アルバム名、スタディ数）を設定
         String[] albumColumns = { "アルバム名", "スタディ数" };
         javax.swing.table.DefaultTableModel albumModel = new javax.swing.table.DefaultTableModel(albumColumns, 0) {
             @Override
@@ -233,13 +240,9 @@ public class BrowserController extends JFrame {
                 return false;
             }
         };
-        albumTable = new JTable(albumModel);
-        albumTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        albumTable.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && !isUpdatingAlbumTable) {
-                refreshDatabase(null);
-            }
-        });
+        albumTable.setModel(albumModel);
+        // HOROS-20240407準拠: 選択変更リスナーはAlbumTableView内で処理されるため、ここでは追加しない
+        // ただし、isUpdatingAlbumTableフラグを考慮する必要があるため、AlbumTableViewを修正
         // HOROS-20240407準拠: MainMenu.xib 4104行目 - tableHeaderCell title="Albums"
         albumTable.getTableHeader().setReorderingAllowed(false);
         JScrollPane albumScroll = new JScrollPane(albumTable);
@@ -258,16 +261,36 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 4225行目 - tableView id="14153" (Activity)
         splitSourcesActivity = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         splitSourcesActivity.setName("splitSourcesActivity"); // 検索用に名前を設定
-
+        
         // Sources（中）- データベースリスト
-        // HOROS-20240407準拠: BrowserController.h 180行目 IBOutlet NSTableView
-        // *_sourcesTableView;
-        // HOROS-20240407準拠: MainMenu.xib 4142行目 - box id="11698" title="Sources"
-        // titlePosition="noTitle"
-        // HOROS-20240407準拠: MainMenu.xib 4164行目 - tableHeaderCell title="Sources"
-        JList<String> sourcesList = new JList<>(new String[] { "Documents DB", "Description" });
-        sourcesList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        JScrollPane sourcesScroll = new JScrollPane(sourcesList);
+        // HOROS-20240407準拠: BrowserController.h 138行目 IBOutlet NSTableView *_sourcesTableView;
+        // HOROS-20240407準拠: MainMenu.xib 4156行目 - tableView id="11693"
+        // HOROS-20240407準拠: MainMenu.xib 4163行目 - tableColumn identifier="Source" title="Sources"
+        // HOROS-20240407準拠: MainMenu.xib 4176行目 - binding keyPath="arrangedObjects.description"
+        String[] sourcesColumns = { "Sources" };
+        javax.swing.table.DefaultTableModel sourcesModel = new javax.swing.table.DefaultTableModel(sourcesColumns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        // HOROS-20240407準拠: 初期データとして"Documents DB"を追加
+        sourcesModel.addRow(new Object[] { "Documents DB" });
+        sourcesTableView = new javax.swing.JTable(sourcesModel);
+        sourcesTableView.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        // HOROS-20240407準拠: MainMenu.xib 4156行目 - columnReordering="NO" columnResizing="NO"
+        sourcesTableView.getTableHeader().setReorderingAllowed(false);
+        sourcesTableView.setColumnSelectionAllowed(false);
+        sourcesTableView.setRowSelectionAllowed(true);
+        // HOROS-20240407準拠: MainMenu.xib 4163行目 - 列識別子を設定
+        sourcesTableView.getColumnModel().getColumn(0).setIdentifier("Source");
+        // HOROS-20240407準拠: 選択変更リスナー
+        sourcesTableView.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                sourceSelectionChanged();
+            }
+        });
+        JScrollPane sourcesScroll = new JScrollPane(sourcesTableView);
         // HOROS-20240407準拠: MainMenu.xib 4142行目 - box title="Sources"
         // titlePosition="noTitle"
         // Java SwingではTitledBorderで見出しを表示
@@ -277,7 +300,7 @@ public class BrowserController extends JFrame {
                 javax.swing.border.TitledBorder.LEFT,
                 javax.swing.border.TitledBorder.TOP));
         splitSourcesActivity.setTopComponent(sourcesScroll);
-
+        
         // Activity（下）
         // HOROS-20240407準拠: BrowserController+Activity.h
         // HOROS-20240407準拠: BrowserController+Activity.mm 64-72行目
@@ -323,31 +346,6 @@ public class BrowserController extends JFrame {
         
         // Activityの最小高さを設定（見えるようにするため）
         activityScroll.setMinimumSize(new java.awt.Dimension(0, 108));
-        
-        // ディバイダー位置の変更を監視して保存
-        splitSourcesActivity.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
-            saveDividerLocations();
-        });
-        splitAlbums.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
-            saveDividerLocations();
-        });
-        // splitComparativeのディバイダー位置変更も監視（後で追加されるため、ここでは設定しない）
-        
-        // 初期ディバイダー位置を復元（ウィンドウが表示された後に実行）
-        addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override
-            public void componentShown(java.awt.event.ComponentEvent e) {
-                restoreDividerLocations();
-                // splitComparativeのディバイダー位置変更を監視（保存用）
-                SwingUtilities.invokeLater(() -> {
-                    if (splitComparative != null) {
-                        splitComparative.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
-                            saveDividerLocations();
-                        });
-                    }
-                });
-            }
-        });
 
         // HOROS-20240407準拠: awakeActivityを呼び出す（BrowserController.m 14432行目）
         // ただし、activityHelperは既に初期化済みなので、ここではactivityTableViewの設定のみ行う
@@ -361,17 +359,18 @@ public class BrowserController extends JFrame {
         // 上部テーブルエリア（水平スプリッター）: databaseOutline | comparativeScrollView
         // HOROS-20240407準拠: MainMenu.xib 4284-4714行目
         JSplitPane topTablesSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-
+        
         // 患者情報テーブル（左）- databaseOutline
         // HOROS-20240407準拠: BrowserController.h 130行目 IBOutlet MyOutlineView *databaseOutline;
         // HOROS-20240407準拠: MainMenu.xib 4292行目 - outlineView id="966"
         databaseOutline = new DatabaseOutlineView(this);
         JScrollPane patientTableScroll = new JScrollPane(databaseOutline);
         topTablesSplit.setLeftComponent(patientTableScroll);
-
+        
         // 履歴パネル（右）- comparativeTable
         // HOROS-20240407準拠: BrowserController.h 270行目 IBOutlet NSTableView *comparativeTable;
         // HOROS-20240407準拠: MainMenu.xib 4666-4714行目 - comparativeScrollView id="14720" width="205"
+        // HOROS-20240407準拠: BrowserController.m 11369-11393行目 - ComparativeCellを使用して2行表示
         String[] comparativeColumns = { "History" };
         javax.swing.table.DefaultTableModel comparativeModel = new javax.swing.table.DefaultTableModel(comparativeColumns, 0) {
             @Override
@@ -382,21 +381,285 @@ public class BrowserController extends JFrame {
         comparativeTable = new javax.swing.JTable(comparativeModel);
         comparativeTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         comparativeTable.getTableHeader().setReorderingAllowed(false);
+        // HOROS-20240407準拠: 行の高さを設定（2行表示のため）
+        // HOROS-20240407準拠: BrowserController.m 322-353行目 - setRowHeight: 13/16/21/24/29/43
+        // 通常モード（mode == 0）: gHorizontalHistoryの場合は16、そうでない場合は29
+        // 罫線に重ならないように、行の高さを適切に設定（ユーザー要求：下が余っているので小さく）
+        comparativeTable.setRowHeight(30); // 2行表示に適した高さ（下の余白を減らす）
+        
+        // HOROS-20240407準拠: カスタムセルレンダラーを設定（2行表示：スタディ名/モダリティ、日付/画像数）
+        // HOROS-20240407準拠: BrowserController.m 11369-11393行目 - ComparativeCellを使用して2行表示
+        
+        // HOROS-20240407準拠: ComparativeCell.mm 185-254行目 - カスタム描画を使用
+        // HOROS-20240407準拠: 右寄せのテキストを先に描画し、その幅を取得して左側のテキストの幅を調整
+        comparativeTable.setDefaultRenderer(Object.class, new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(
+                    javax.swing.JTable table, Object value, boolean isSelected, boolean hasFocus,
+                    int row, int column) {
+                // HOROS-20240407準拠: ComparativeCell.mm 98-105行目 - カスタム描画を使用
+                final javax.swing.JTable finalTable = table;
+                final boolean finalRowSelected = isSelected || table.isRowSelected(row);
+                
+                // カスタムJPanelクラスを定義
+                class ComparativeCellPanel extends javax.swing.JPanel {
+                    private com.jj.dicomviewer.model.DicomStudy study;
+                    private boolean selected;
+                    private java.awt.Font customFont;
+                    private javax.swing.JTable tableRef;
+                    
+                    public void setStudy(com.jj.dicomviewer.model.DicomStudy s) { this.study = s; }
+                    public void setSelected(boolean sel) { this.selected = sel; }
+                    public void setCustomFont(java.awt.Font f) { this.customFont = f; }
+                    public void setTable(javax.swing.JTable t) { this.tableRef = t; }
+                    
+                    @Override
+                    protected void paintComponent(java.awt.Graphics g) {
+                        super.paintComponent(g);
+                        
+                        if (study == null || tableRef == null) return;
+                        
+                        java.awt.Graphics2D g2d = (java.awt.Graphics2D) g.create();
+                        g2d.setFont(customFont != null ? customFont : getFont());
+                        
+                        // HOROS-20240407準拠: ComparativeCell.mm 100-102行目 - 罫線を描画
+                        g2d.setColor(new java.awt.Color(0.666f, 0.666f, 0.666f, 0.333f));
+                        g2d.setStroke(new java.awt.BasicStroke(1.0f));
+                        int lineY = getHeight() - 1;
+                        g2d.drawLine(0, lineY, getWidth(), lineY);
+                        
+                        // HOROS-20240407準拠: スタディ名、モダリティ、日付、画像数を取得
+                        String studyName = study.getStudyName();
+                        boolean isUnnamed = false;
+                        if (studyName == null || studyName.isEmpty() || "unnamed".equalsIgnoreCase(studyName)) {
+                            studyName = "Unnamed";
+                            isUnnamed = true;
+                        }
+                        String modality = study.getModality();
+                        if (modality == null || modality.isEmpty()) {
+                            modality = "";
+                        }
+                        java.time.LocalDateTime date = study.getDate();
+                        String dateStr = "";
+                        if (date != null) {
+                            try {
+                                dateStr = date.format(java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"));
+                            } catch (Exception e) {
+                                dateStr = date.toString();
+                            }
+                        }
+                        Integer numberOfImages = study.getNumberOfImages();
+                        String imageCountStr = "";
+                        if (numberOfImages != null) {
+                            int count = Math.abs(numberOfImages.intValue());
+                            imageCountStr = count + (count == 1 ? " image" : " images");
+                        }
+                        
+                        // HOROS-20240407準拠: 色を設定
+                        java.awt.Color fgColor = selected ? tableRef.getSelectionForeground() : tableRef.getForeground();
+                        java.awt.Color studyNameColor = fgColor;
+                        if (isUnnamed && !selected) {
+                            java.awt.Color originalColor = tableRef.getForeground();
+                            java.awt.Color grayColor = new java.awt.Color(128, 128, 128);
+                            studyNameColor = new java.awt.Color(
+                                (int)(originalColor.getRed() * 0.6 + grayColor.getRed() * 0.4),
+                                (int)(originalColor.getGreen() * 0.6 + grayColor.getGreen() * 0.4),
+                                (int)(originalColor.getBlue() * 0.6 + grayColor.getBlue() * 0.4)
+                            );
+                        }
+                        java.awt.Color dateColor = selected ? fgColor : new java.awt.Color(102, 102, 102);
+                        
+                        // HOROS-20240407準拠: ComparativeCell.mm 185-254行目
+                        // 1行目：rightTextFirstLine（右寄せ、モダリティ）を先に描画
+                        // 右端が切れないように、列幅を考慮して描画位置を計算
+                        // テーブルの列幅を取得（列幅が設定されていない場合はgetWidth()を使用）
+                        int cellWidth = getWidth();
+                        if (tableRef != null && tableRef.getColumnModel().getColumnCount() > 0) {
+                            int columnWidth = tableRef.getColumnModel().getColumn(0).getWidth();
+                            if (columnWidth > 0) {
+                                cellWidth = columnWidth;
+                            }
+                        }
+                        // 垂直スクロールバーが表示されている場合、その幅を考慮して描画領域を調整
+                        // ただし、セル自体の幅は列幅に合わせられているため、getWidth()を使用
+                        // 実際の描画可能な幅は、セルの幅（列幅）を使用
+                        // 右端に3ピクセルのマージンを設けて、スクロールバーに被さることを防ぐ
+                        java.awt.Rectangle frame = new java.awt.Rectangle(0, 0, cellWidth, getHeight());
+                        final int spacer = 2; // HOROS-20240407準拠: ComparativeCell.mm 112行目
+                        final int lineSpace = 12; // HOROS-20240407準拠: BrowserController.m 368行目 - comparativeLineSpace
+                        final int rightPadding = 3; // 右端のパディング（スクロールバーに被さることを防ぐため）
+                        
+                        // 1行目：右寄せのテキスト（モダリティ）を先に描画
+                        if (modality != null && !modality.isEmpty()) {
+                            java.awt.FontMetrics modalityFm = g2d.getFontMetrics();
+                            int modalityWidth = modalityFm.stringWidth(modality);
+                            g2d.setColor(fgColor);
+                            // 右端が切れないように、列幅から直接計算（列幅は既にスクロールバーを考慮済み）
+                            g2d.drawString(modality, cellWidth - modalityWidth - rightPadding, frame.y + 1 + modalityFm.getAscent());
+                            
+                            // 左側のテキスト用のフレーム幅を調整
+                            frame.width -= modalityWidth + spacer + rightPadding;
+                        }
+                        
+                        // 1行目：左寄せのテキスト（スタディ名）を描画
+                        if (studyName != null && !studyName.isEmpty()) {
+                            java.awt.FontMetrics nameFm = g2d.getFontMetrics();
+                            g2d.setColor(studyNameColor);
+                            String displayName = studyName;
+                            int nameWidth = nameFm.stringWidth(displayName);
+                            if (nameWidth > frame.width) {
+                                // 省略表示
+                                displayName = nameFm.stringWidth("...") > frame.width ? "" : 
+                                    nameFm.stringWidth(displayName.substring(0, Math.max(0, displayName.length() - 3)) + "...") <= frame.width ?
+                                    displayName.substring(0, Math.max(0, displayName.length() - 3)) + "..." : displayName;
+                            }
+                            g2d.drawString(displayName, frame.x, frame.y + 1 + nameFm.getAscent());
+                        }
+                        
+                        // 2行目：右寄せのテキスト（画像数）を先に描画
+                        frame = new java.awt.Rectangle(0, 0, cellWidth, getHeight());
+                        if (imageCountStr != null && !imageCountStr.isEmpty()) {
+                            java.awt.Font smallFont = g2d.getFont().deriveFont(g2d.getFont().getSize() * 0.85f);
+                            java.awt.FontMetrics imageFm = g2d.getFontMetrics(smallFont);
+                            g2d.setFont(smallFont);
+                            int imageWidth = imageFm.stringWidth(imageCountStr);
+                            g2d.setColor(dateColor);
+                            // 右端が切れないように、列幅から直接計算（列幅は既にスクロールバーを考慮済み）
+                            g2d.drawString(imageCountStr, cellWidth - imageWidth - rightPadding, frame.y + lineSpace + 1 + imageFm.getAscent());
+                            
+                            // 左側のテキスト用のフレーム幅を調整
+                            frame.width -= imageWidth + spacer + rightPadding;
+                        }
+                        
+                        // 2行目：左寄せのテキスト（日付）を描画
+                        if (dateStr != null && !dateStr.isEmpty()) {
+                            java.awt.Font smallFont = g2d.getFont().deriveFont(g2d.getFont().getSize() * 0.85f);
+                            java.awt.FontMetrics dateFm = g2d.getFontMetrics(smallFont);
+                            g2d.setFont(smallFont);
+                            g2d.setColor(dateColor);
+                            g2d.drawString(dateStr, frame.x, frame.y + lineSpace + 1 + dateFm.getAscent());
+                        }
+                        
+                        g2d.dispose();
+                    }
+                }
+                
+                ComparativeCellPanel panel = new ComparativeCellPanel();
+                panel.setOpaque(true);
+                
+                if (finalRowSelected) {
+                    panel.setBackground(finalTable.getSelectionBackground());
+                } else {
+                    panel.setBackground(finalTable.getBackground());
+                }
+                
+                // HOROS-20240407準拠: BrowserController.m 11373-11393行目
+                com.jj.dicomviewer.model.DicomStudy dicomStudy = null;
+                if (value instanceof com.jj.dicomviewer.model.DicomStudy) {
+                    dicomStudy = (com.jj.dicomviewer.model.DicomStudy) value;
+                } else if (comparativeStudies != null && row >= 0 && row < comparativeStudies.size()) {
+                    Object study = comparativeStudies.get(row);
+                    if (study instanceof com.jj.dicomviewer.model.DicomStudy) {
+                        dicomStudy = (com.jj.dicomviewer.model.DicomStudy) study;
+                    }
+                }
+                
+                if (dicomStudy != null) {
+                    // HOROS-20240407準拠: ローカルスタディは太字（BrowserController.m 11383行目）
+                    // HOROS-20240407準拠: フォントサイズを2ポイント小さくする（ユーザー要求）
+                    java.awt.Font originalFont = finalTable.getFont();
+                    java.awt.Font smallerFont = originalFont.deriveFont(java.awt.Font.BOLD, Math.max(9, originalFont.getSize() - 2));
+                    panel.setFont(smallerFont);
+                    
+                    // パネルにデータを設定
+                    panel.setStudy(dicomStudy);
+                    panel.setSelected(finalRowSelected);
+                    panel.setCustomFont(smallerFont);
+                    panel.setTable(finalTable);
+                }
+                
+                return panel;
+            }
+        });
         JScrollPane comparativeScroll = new JScrollPane(comparativeTable);
-        // HOROS-20240407準拠: 履歴パネルの幅を205ピクセルに固定（MainMenu.xib 4667行目 width="205"）
-        comparativeScroll.setPreferredSize(new java.awt.Dimension(205, 0));
-        comparativeScroll.setMinimumSize(new java.awt.Dimension(205, 0));
-        comparativeScroll.setMaximumSize(new java.awt.Dimension(205, Integer.MAX_VALUE));
+        // HOROS-20240407準拠: 履歴パネルの幅を160ピクセルに固定（ユーザー要求：180ピクセルからさらに縮小、水平スクロールバーが出ないように）
+        int historyPanelWidth = 160;
+        comparativeScroll.setPreferredSize(new java.awt.Dimension(historyPanelWidth, 0));
+        comparativeScroll.setMinimumSize(new java.awt.Dimension(historyPanelWidth, 0));
+        comparativeScroll.setMaximumSize(new java.awt.Dimension(historyPanelWidth, Integer.MAX_VALUE));
+        
+        // 水平スクロールバーを無効にする（ユーザー要求：水平スクロールバーが出ないように）
+        comparativeScroll.setHorizontalScrollBarPolicy(javax.swing.JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        
+        // HOROS-20240407準拠: テーブルのセル間隔を0に設定して余白を減らす
+        comparativeTable.setIntercellSpacing(new java.awt.Dimension(0, 0));
+        
+        // HOROS-20240407準拠: テーブルの列幅をパネル幅に完全に合わせる
+        // スクロールバーが表示されない場合の余白を防ぐため、列幅をパネル幅に完全に合わせる
+        comparativeTable.setAutoResizeMode(javax.swing.JTable.AUTO_RESIZE_OFF);
+        
+        // 列幅を動的に調整する関数（水平スクロールバーが出ないように、列幅をパネル幅に完全に合わせる）
+        // HOROS-20240407準拠: スクロールバーが表示されていてもいなくても、常にスクロールバー分のスペースを確保
+        java.util.function.Consumer<Void> adjustColumnWidth = (Void v) -> {
+            if (comparativeTable.getColumnModel().getColumnCount() > 0) {
+                javax.swing.JScrollBar verticalScrollBar = comparativeScroll.getVerticalScrollBar();
+                int availableWidth = historyPanelWidth;
+                // スクロールバーが表示されているかどうかに関わらず、常にスクロールバーの幅を引く
+                // HOROS-20240407準拠: スクロールバー分のスペースを常に確保することで、右端の文字が切れないようにする
+                if (verticalScrollBar != null) {
+                    // スクロールバーの幅を取得（表示されていない場合でも、preferredSizeから取得）
+                    int scrollBarWidth = verticalScrollBar.isVisible() ? 
+                        verticalScrollBar.getWidth() : 
+                        verticalScrollBar.getPreferredSize().width;
+                    availableWidth -= scrollBarWidth;
+                }
+                // 水平スクロールバーが出ないように、列幅を利用可能な幅に完全に合わせる
+                // テーブルの幅と列幅の合計が一致するようにする
+                int columnWidth = availableWidth;
+                comparativeTable.getColumnModel().getColumn(0).setPreferredWidth(columnWidth);
+                comparativeTable.getColumnModel().getColumn(0).setMinWidth(columnWidth);
+                comparativeTable.getColumnModel().getColumn(0).setMaxWidth(columnWidth);
+                // テーブル自体の幅も設定（列幅の合計と一致させる）
+                comparativeTable.setPreferredScrollableViewportSize(new java.awt.Dimension(columnWidth, 0));
+                // テーブルのサイズを強制的に更新
+                comparativeTable.setSize(columnWidth, comparativeTable.getHeight());
+                // テーブルを再描画して、列幅の変更を反映
+                comparativeTable.revalidate();
+                comparativeTable.repaint();
+            }
+        };
+        
+        // スクロールバーの表示状態に応じて列幅を動的に調整するリスナーを追加
+        javax.swing.JScrollBar verticalScrollBar = comparativeScroll.getVerticalScrollBar();
+        if (verticalScrollBar != null) {
+            verticalScrollBar.addComponentListener(new java.awt.event.ComponentAdapter() {
+                @Override
+                public void componentShown(java.awt.event.ComponentEvent e) {
+                    adjustColumnWidth.accept(null);
+                }
+                
+                @Override
+                public void componentHidden(java.awt.event.ComponentEvent e) {
+                    adjustColumnWidth.accept(null);
+                }
+            });
+        }
+        
+        // 初期状態：列幅をパネル幅に完全に合わせる（スクロールバーが表示されない場合を想定）
+        // コンポーネントが表示された後に、スクロールバーの状態を確認して列幅を調整
+        SwingUtilities.invokeLater(() -> {
+            adjustColumnWidth.accept(null);
+        });
+        
         topTablesSplit.setRightComponent(comparativeScroll);
         topTablesSplit.setResizeWeight(1.0); // 患者情報テーブルが可変、履歴パネルが固定
-        // HOROS-20240407準拠: 履歴パネルの幅を205ピクセルに固定（ディバイダーを無効化）
+        // HOROS-20240407準拠: 履歴パネルの幅を固定（ディバイダーを非表示にする）
+        topTablesSplit.setDividerSize(0); // デバイダーを非表示（動かせない仕様のため）
         SwingUtilities.invokeLater(() -> {
             int totalWidth = topTablesSplit.getWidth();
             if (totalWidth > 0) {
-                topTablesSplit.setDividerLocation(totalWidth - 205);
+                topTablesSplit.setDividerLocation(totalWidth - historyPanelWidth);
             }
-            // ディバイダーを無効化（履歴パネルが固定のため不要）
-            topTablesSplit.setEnabled(false);
         });
 
         splitComparative.setTopComponent(topTablesSplit);
@@ -415,7 +678,7 @@ public class BrowserController extends JFrame {
         thumbnailsScrollView.setBackground(null);
         thumbnailsScrollView.getViewport().setBackground(null);
         bottomPreviewSplit.setLeftComponent(thumbnailsScrollView);
-
+        
         // プレビュー（右）- imageView
         // HOROS-20240407準拠: MainMenu.xib 4864行目 - customView id="1166" customClass="PreviewView"
         // HOROS-20240407準拠: BrowserController.h 146行目 IBOutlet PreviewView *imageView;
@@ -481,7 +744,7 @@ public class BrowserController extends JFrame {
         // 右側の垂直スプリットの位置を上から約50%の位置に設定（上部50%、下部50%）
         splitComparative.setBottomComponent(bottomPreviewSplit);
         splitComparative.setResizeWeight(0.5); // 上部テーブルエリアが50%、下部プレビューエリアが50%
-
+        
         // ========== メインウィンドウ（水平スプリッター） ==========
         // HOROS-20240407準拠: splitViewHorz - 左サイドバー | 右メインパネル
         // HOROS-20240407準拠: BrowserController.h 111行目 IBOutlet NSSplitView
@@ -492,7 +755,7 @@ public class BrowserController extends JFrame {
         splitViewHorz.setLeftComponent(splitAlbums);
         splitViewHorz.setRightComponent(splitComparative);
         splitViewHorz.setResizeWeight(0.2); // 左サイドバーが20%
-
+        
         // ステータスバーをウィンドウ全体の最下部に配置
         // HOROS-20240407準拠: MainMenu.xib 4895行目 - splitView id="14352" (_bottomSplit) 水平スプリッター
         // HOROS-20240407準拠: ステータスバーはsplitViewHorzの下に配置（ウィンドウ全体の最下部）
@@ -501,7 +764,7 @@ public class BrowserController extends JFrame {
         mainContentPanel.add(bottomSplit, BorderLayout.SOUTH);
 
         contentPane.add(mainContentPanel, BorderLayout.CENTER);
-
+        
         // HOROS-20240407準拠: 検索フィールド
         // HOROS-20240407準拠: BrowserController.h 180行目 IBOutlet NSSearchField
         // *searchField;
@@ -510,7 +773,7 @@ public class BrowserController extends JFrame {
         searchField.addActionListener(e -> {
             // TODO: 検索処理を実装
         });
-
+        
         // HOROS-20240407準拠: ドラッグ&ドロップ対応
         setupDragAndDrop();
 
@@ -523,7 +786,7 @@ public class BrowserController extends JFrame {
             // activityTableViewは既にactivityHelperをTableModelとして設定済み
             // BrowserActivityHelperがThreadsManagerを監視して自動的に更新される
         }
-
+        
         // アルバムテーブルのデータを更新
         updateAlbumTable();
 
@@ -549,6 +812,49 @@ public class BrowserController extends JFrame {
             
             // HOROS-20240407準拠: 列の表示/非表示状態を復元（COLUMNSDATABASEから）
             refreshColumns();
+            
+        });
+        
+        // ディバイダー位置変更を監視（保存用）
+        // HOROS-20240407準拠: NSSplitViewのautosaveNameにより自動保存されるが、Java Swingでは手動実装が必要
+        // 注意: 復元処理が完了するまで保存を無効化するため、componentShownで設定
+        // ディバイダー位置を復元（ウィンドウが表示された後に一度だけ実行）
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentShown(java.awt.event.ComponentEvent e) {
+                if (!dividerLocationsRestored) {
+                    // コンポーネントのサイズが確定してから復元するため、SwingUtilities.invokeLaterで遅延
+                    SwingUtilities.invokeLater(() -> {
+                        SwingUtilities.invokeLater(() -> {
+                            restoreDividerLocations();
+                            dividerLocationsRestored = true;
+                            
+                            // 復元が完了した後に、ディバイダー位置変更を監視して保存
+                            if (splitAlbums != null) {
+                                splitAlbums.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+                                    saveDividerLocations();
+                                });
+                            }
+                            if (splitSourcesActivity != null) {
+                                splitSourcesActivity.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+                                    saveDividerLocations();
+                                });
+                            }
+                            if (splitComparative != null) {
+                                splitComparative.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+                                    saveDividerLocations();
+                                });
+                            }
+                            
+                            // HOROS-20240407準拠: BrowserController.m 14428行目
+                            // loadingIsOver = YES;
+                            // すべての初期化と復元が完了した後に設定
+                            loadingIsOver = true;
+                            System.out.println("[DEBUG] loadingIsOver set to true");
+                        });
+                    });
+                }
+            }
         });
 
         // HOROS-20240407準拠: BrowserController.m 14682行目
@@ -647,26 +953,31 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: MainMenu.xib 4078行目 - splitView autosaveName="albumsAndSources"
      * NSSplitViewのautosaveNameにより自動保存されるが、Java Swingでは手動実装が必要
      * （プラットフォーム差を埋めるための最小限のカスタムロジック）
+     * 
+     * 注意: 比率で保存することで、ウィンドウサイズが変わっても正しく復元される
      */
     private void saveDividerLocations() {
         try {
             Preferences prefs = Preferences.userNodeForPackage(BrowserController.class);
             
-            // splitAlbumsとsplitSourcesActivityのディバイダー位置を保存
+            // splitAlbumsとsplitSourcesActivityのディバイダー位置を保存（比率で保存）
             if (splitAlbums != null && splitAlbums.getHeight() > 0) {
                 int albumsDividerLocation = splitAlbums.getDividerLocation();
-                prefs.putInt("AlbumsDividerLocation", albumsDividerLocation);
+                double albumsRatio = (double) albumsDividerLocation / splitAlbums.getHeight();
+                prefs.putDouble("AlbumsDividerRatio", albumsRatio);
             }
             
             if (splitSourcesActivity != null && splitSourcesActivity.getHeight() > 0) {
                 int sourcesActivityDividerLocation = splitSourcesActivity.getDividerLocation();
-                prefs.putInt("SourcesActivityDividerLocation", sourcesActivityDividerLocation);
+                double sourcesActivityRatio = (double) sourcesActivityDividerLocation / splitSourcesActivity.getHeight();
+                prefs.putDouble("SourcesActivityDividerRatio", sourcesActivityRatio);
             }
             
-            // splitComparativeのディバイダー位置も保存
+            // splitComparativeのディバイダー位置も保存（比率で保存）
             if (splitComparative != null && splitComparative.getHeight() > 0) {
                 int comparativeDividerLocation = splitComparative.getDividerLocation();
-                prefs.putInt("ComparativeDividerLocation", comparativeDividerLocation);
+                double comparativeRatio = (double) comparativeDividerLocation / splitComparative.getHeight();
+                prefs.putDouble("ComparativeDividerRatio", comparativeRatio);
             }
             
             prefs.flush();
@@ -680,44 +991,44 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: MainMenu.xib 4078行目 - splitView autosaveName="albumsAndSources"
      * NSSplitViewのautosaveNameにより自動復元されるが、Java Swingでは手動実装が必要
      * （プラットフォーム差を埋めるための最小限のカスタムロジック）
+     * 
+     * 注意: 保存された比率を使用して復元することで、ウィンドウサイズが変わっても正しく復元される
      */
     private void restoreDividerLocations() {
         try {
             Preferences prefs = Preferences.userNodeForPackage(BrowserController.class);
             
-            // splitAlbumsとsplitSourcesActivityのディバイダー位置を復元
+            // splitAlbumsとsplitSourcesActivityのディバイダー位置を復元（比率で復元）
             if (splitAlbums != null && splitAlbums.getHeight() > 0) {
-                int savedLocation = prefs.getInt("AlbumsDividerLocation", -1);
-                if (savedLocation > 0) {
-                    // 保存された位置を復元（比率で設定）
-                    double ratio = (double) savedLocation / splitAlbums.getHeight();
-                    splitAlbums.setDividerLocation(ratio);
+                double savedRatio = prefs.getDouble("AlbumsDividerRatio", -1.0);
+                if (savedRatio > 0.0 && savedRatio < 1.0) {
+                    // 保存された比率で復元
+                    splitAlbums.setDividerLocation(savedRatio);
                 } else {
-                    // デフォルト位置: Albumsが198px
+                    // デフォルト位置: Albumsが198px（比率で計算）
+                    // ただし、高さが確定していない場合は後で再設定
                     double albumsRatio = 198.0 / 687.0;
                     splitAlbums.setDividerLocation(albumsRatio);
                 }
             }
             
             if (splitSourcesActivity != null && splitSourcesActivity.getHeight() > 0) {
-                int savedLocation = prefs.getInt("SourcesActivityDividerLocation", -1);
-                if (savedLocation > 0) {
-                    // 保存された位置を復元（比率で設定）
-                    double ratio = (double) savedLocation / splitSourcesActivity.getHeight();
-                    splitSourcesActivity.setDividerLocation(ratio);
+                double savedRatio = prefs.getDouble("SourcesActivityDividerRatio", -1.0);
+                if (savedRatio > 0.0 && savedRatio < 1.0) {
+                    // 保存された比率で復元
+                    splitSourcesActivity.setDividerLocation(savedRatio);
                 } else {
                     // デフォルト位置: Sourcesが1/3、Activityが2/3
                     splitSourcesActivity.setDividerLocation(0.33);
                 }
             }
             
-            // splitComparativeのディバイダー位置も復元
+            // splitComparativeのディバイダー位置も復元（比率で復元）
             if (splitComparative != null && splitComparative.getHeight() > 0) {
-                int savedLocation = prefs.getInt("ComparativeDividerLocation", -1);
-                if (savedLocation > 0) {
-                    // 保存された位置を復元（比率で設定）
-                    double ratio = (double) savedLocation / splitComparative.getHeight();
-                    splitComparative.setDividerLocation(ratio);
+                double savedRatio = prefs.getDouble("ComparativeDividerRatio", -1.0);
+                if (savedRatio > 0.0 && savedRatio < 1.0) {
+                    // 保存された比率で復元
+                    splitComparative.setDividerLocation(savedRatio);
                 } else {
                     // デフォルト位置: 上から50%
                     splitComparative.setDividerLocation(0.5);
@@ -727,7 +1038,7 @@ public class BrowserController extends JFrame {
             // エラーが発生した場合はデフォルト位置を使用
         }
     }
-
+    
     /**
      * ドラッグ&ドロップ機能を設定
      * HOROS-20240407準拠:
@@ -741,11 +1052,11 @@ public class BrowserController extends JFrame {
                 try {
                     dtde.acceptDrop(DnDConstants.ACTION_COPY);
                     Transferable transferable = dtde.getTransferable();
-
+                    
                     if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
-
+                        
                         // ファイルパスのリストを作成
                         List<String> filePaths = new ArrayList<>();
                         for (File file : files) {
@@ -756,13 +1067,13 @@ public class BrowserController extends JFrame {
                                 collectDicomFiles(file, filePaths);
                             }
                         }
-
+                        
                         if (!filePaths.isEmpty()) {
                             // HOROS-20240407準拠: BrowserController.m 1472行目
                             // [self.database addFilesAtPaths:localFiles]
                             importFiles(filePaths);
                         }
-
+                        
                         dtde.dropComplete(true);
                     } else {
                         dtde.rejectDrop();
@@ -773,7 +1084,7 @@ public class BrowserController extends JFrame {
             }
         });
     }
-
+    
     /**
      * ディレクトリからDICOMファイルを再帰的に収集
      */
@@ -784,9 +1095,9 @@ public class BrowserController extends JFrame {
                 if (file.isFile()) {
                     // DICOMファイルの拡張子をチェック（.dcm, .dicom, 拡張子なしなど）
                     String name = file.getName().toLowerCase();
-                    if (name.endsWith(".dcm") || name.endsWith(".dicom") ||
-                            name.endsWith(".ima") || name.endsWith(".img") ||
-                            !name.contains(".")) {
+                    if (name.endsWith(".dcm") || name.endsWith(".dicom") || 
+                        name.endsWith(".ima") || name.endsWith(".img") ||
+                        !name.contains(".")) {
                         filePaths.add(file.getAbsolutePath());
                     }
                 } else if (file.isDirectory()) {
@@ -795,7 +1106,7 @@ public class BrowserController extends JFrame {
             }
         }
     }
-
+    
     /**
      * ファイルとフォルダをデータベースに追加
      * HOROS-20240407準拠: - (void) addFilesAndFolderToDatabase:(NSArray*) filenames
@@ -808,7 +1119,7 @@ public class BrowserController extends JFrame {
         if (database == null || filenames == null || filenames.isEmpty()) {
             return;
         }
-
+        
         // HOROS-20240407準拠: BrowserController.m 870行目
         // NSMutableArray *filesArray = [[[NSMutableArray alloc] initWithCapacity:0]
         // autorelease];
@@ -886,8 +1197,8 @@ public class BrowserController extends JFrame {
                                         // HOROS-20240407準拠: BrowserController.m 944-947行目
                                         // エラーが発生したファイルはスキップ
                                     }
-                                });
-                    } catch (Exception e) {
+            });
+        } catch (Exception e) {
                         // エラーが発生したディレクトリはスキップ
                     }
                 } else {
@@ -963,7 +1274,7 @@ public class BrowserController extends JFrame {
     public void importFiles(List<String> filePaths) {
         addFilesAndFolderToDatabase(filePaths);
     }
-
+    
     /**
      * ファイル選択ダイアログからインポート
      * HOROS-20240407準拠: メニューからのインポート機能
@@ -973,12 +1284,12 @@ public class BrowserController extends JFrame {
         fileChooser.setFileSelectionMode(javax.swing.JFileChooser.FILES_AND_DIRECTORIES);
         fileChooser.setMultiSelectionEnabled(true);
         fileChooser.setDialogTitle("DICOMファイルをインポート");
-
+        
         int result = fileChooser.showOpenDialog(this);
         if (result == javax.swing.JFileChooser.APPROVE_OPTION) {
             File[] selectedFiles = fileChooser.getSelectedFiles();
             List<String> filePaths = new ArrayList<>();
-
+            
             for (File file : selectedFiles) {
                 if (file.isFile()) {
                     filePaths.add(file.getAbsolutePath());
@@ -986,12 +1297,12 @@ public class BrowserController extends JFrame {
                     collectDicomFiles(file, filePaths);
                 }
             }
-
+            
             if (!filePaths.isEmpty()) {
                 importFiles(filePaths);
             }
         }
-
+        
         // HOROS-20240407準拠: BrowserController.m 14316行目
         // カラム状態を復元
         restoreDatabaseColumnState();
@@ -1006,13 +1317,13 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: 列ヘッダーのクリック処理はNSOutlineViewが自動的に処理
         // Java Swingでは、JXTreeTableが自動的にヘッダークリックを処理するため、
         // カスタムのMouseListenerは不要（HOROS-20240407準拠）
-
+        
         // HOROS-20240407準拠: BrowserController.m 14738行目
         // ウィンドウが閉じられる時にカラム状態とソート状態を保存
         // 注意: 既にaddWindowListenerが呼ばれている場合は、重複を避ける
         // HOROS-20240407準拠: windowWillClose:で保存（14733-14738行目）
     }
-
+    
     /**
      * データベースアウトラインのカラム状態を復元
      * HOROS-20240407準拠: BrowserController.m 14316行目
@@ -1023,11 +1334,11 @@ public class BrowserController extends JFrame {
         if (databaseOutline == null) {
             return;
         }
-
+        
         try {
             Preferences prefs = Preferences.userNodeForPackage(BrowserController.class);
             String columnStateJson = prefs.get("databaseColumns2", null);
-
+            
             if (columnStateJson != null && !columnStateJson.isEmpty()) {
                 // JSON文字列をパースしてList<Map<String, Object>>に変換
                 // 簡易実装: JSONライブラリを使用せず、カンマ区切りで保存
@@ -1042,7 +1353,7 @@ public class BrowserController extends JFrame {
             // logger.error("Failed to restore column state", e);
         }
     }
-
+    
     /**
      * データベースアウトラインのカラム状態を保存
      * HOROS-20240407準拠: BrowserController.m 14738行目
@@ -1053,7 +1364,7 @@ public class BrowserController extends JFrame {
         if (databaseOutline == null) {
             return;
         }
-
+        
         try {
             List<Map<String, Object>> state = databaseOutline.getColumnState();
             if (state != null && !state.isEmpty()) {
@@ -1070,10 +1381,11 @@ public class BrowserController extends JFrame {
             // logger.error("Failed to save column state", e);
         }
     }
-
+    
     /**
      * カラム状態をシリアライズ（簡易実装）
-     * 形式: "Identifier1:Width1,Identifier2:Width2,..."
+     * 形式: "Identifier1:Width1:Index1,Identifier2:Width2:Index2,..."
+     * HOROS-20240407準拠: 列の位置（Index）も保存する必要がある
      */
     private String serializeColumnState(List<Map<String, Object>> state) {
         StringBuilder sb = new StringBuilder();
@@ -1081,36 +1393,46 @@ public class BrowserController extends JFrame {
             Map<String, Object> columnInfo = state.get(i);
             String identifier = (String) columnInfo.get("Identifier");
             Object widthObj = columnInfo.get("Width");
+            Object indexObj = columnInfo.get("Index");
             int width = widthObj instanceof Number ? ((Number) widthObj).intValue() : 0;
-
+            int index = indexObj instanceof Number ? ((Number) indexObj).intValue() : -1;
+            
             if (identifier != null) {
                 if (i > 0) {
                     sb.append(",");
                 }
-                sb.append(identifier).append(":").append(width);
+                sb.append(identifier).append(":").append(width).append(":").append(index);
             }
         }
         return sb.toString();
     }
-
+    
     /**
      * カラム状態をパース（簡易実装）
-     * 形式: "Identifier1:Width1,Identifier2:Width2,..."
+     * 形式: "Identifier1:Width1:Index1,Identifier2:Width2:Index2,..."
+     * HOROS-20240407準拠: 列の位置（Index）も復元する必要がある
+     * 後方互換性: 古い形式（"Identifier1:Width1"）もサポート
      */
     private List<Map<String, Object>> parseColumnState(String json) {
         List<Map<String, Object>> state = new ArrayList<>();
         if (json == null || json.isEmpty()) {
             return state;
         }
-
+        
         String[] parts = json.split(",");
         for (String part : parts) {
-            String[] keyValue = part.split(":", 2);
-            if (keyValue.length == 2) {
+            String[] keyValue = part.split(":");
+            if (keyValue.length >= 2) {
                 try {
                     Map<String, Object> columnInfo = new HashMap<>();
                     columnInfo.put("Identifier", keyValue[0]);
                     columnInfo.put("Width", Integer.parseInt(keyValue[1]));
+                    // Indexが存在する場合は復元、存在しない場合は-1（後方互換性）
+                    if (keyValue.length >= 3) {
+                        columnInfo.put("Index", Integer.parseInt(keyValue[2]));
+                    } else {
+                        columnInfo.put("Index", -1); // 古い形式の場合は-1
+                    }
                     state.add(columnInfo);
                 } catch (NumberFormatException e) {
                     // 無効な数値はスキップ
@@ -1119,57 +1441,67 @@ public class BrowserController extends JFrame {
         }
         return state;
     }
-
+    
     /**
      * アルバムテーブルのデータを更新
      */
     private void updateAlbumTable() {
-        if (albumTable == null || database == null)
+        if (albumTable == null || database == null) {
+            System.out.println("[DEBUG] updateAlbumTable() - albumTable or database is null");
             return;
-
+        }
+        
         // 無限ループ防止
         if (isUpdatingAlbumTable)
             return;
         isUpdatingAlbumTable = true;
-
+        
         try {
             javax.swing.table.DefaultTableModel model = (javax.swing.table.DefaultTableModel) albumTable.getModel();
             model.setRowCount(0);
-
+            
             List<com.jj.dicomviewer.model.DicomAlbum> albums = getAlbumArray();
+            System.out.println("[DEBUG] updateAlbumTable() - albums.size(): " + albums.size());
             for (com.jj.dicomviewer.model.DicomAlbum album : albums) {
                 Object[] row = {
-                        album.getName() != null ? album.getName() : "",
-                        album.getNumberOfStudies()
+                    album.getName() != null ? album.getName() : "",
+                    album.getNumberOfStudies()
                 };
                 model.addRow(row);
+                System.out.println("[DEBUG] updateAlbumTable() - added album: " + album.getName() + " (" + album.getNumberOfStudies() + " studies)");
             }
-
+            
             // HOROS-20240407準拠: 最初のアルバム（"Database"）を自動選択
             if (!albums.isEmpty()) {
                 // フラグにより選択変更イベントが発火してもrefreshDatabaseがスキップされる
                 albumTable.setRowSelectionInterval(0, 0);
-
+                System.out.println("[DEBUG] updateAlbumTable() - selected first album (row 0)");
+                
                 // HOROS-20240407準拠: 選択されたアルバムに基づいてアウトラインビューを更新
                 // ただし、無限ループを防ぐため直接呼び出す
                 if (!isRefreshingOutline) {
+                    System.out.println("[DEBUG] updateAlbumTable() - calling outlineViewRefresh()");
                     SwingUtilities.invokeLater(() -> {
                         outlineViewRefresh();
                     });
+                } else {
+                    System.out.println("[DEBUG] updateAlbumTable() - skipping outlineViewRefresh() (already refreshing)");
                 }
+            } else {
+                System.out.println("[DEBUG] updateAlbumTable() - no albums found");
             }
         } finally {
             isUpdatingAlbumTable = false;
         }
     }
-
+    
     /**
      * HOROS-20240407準拠: + (BrowserController*) currentBrowser (521行目)
      */
     public static BrowserController getCurrentBrowser() {
         return browserWindow;
     }
-
+    
     /**
      * データベースを取得
      * HOROS-20240407準拠: - (DicomDatabase*)database (BrowserController.h)
@@ -1177,7 +1509,7 @@ public class BrowserController extends JFrame {
     public DicomDatabase getDatabase() {
         return database;
     }
-
+    
     /**
      * ファイルをデータベースにコピー
      * HOROS-20240407準拠: - (void) copyFilesIntoDatabaseIfNeeded: (NSMutableArray*)
@@ -1190,16 +1522,16 @@ public class BrowserController extends JFrame {
         if (filesInput == null || filesInput.isEmpty()) {
             return;
         }
-
+        
         // HOROS-20240407準拠: BOOL COPYDATABASE = [[NSUserDefaults standardUserDefaults]
         // boolForKey: @"COPYDATABASE"]; (2196行目)
         boolean copyDatabase = false; // TODO: UserDefaultsから取得
-
+        
         // HOROS-20240407準拠: NSMutableArray *newFilesToCopyList = [NSMutableArray
         // arrayWithCapacity: [filesInput count]]; (2208行目)
         List<String> newFilesToCopyList = new ArrayList<>();
         String inPath = database.getDataDirPath();
-
+        
         // HOROS-20240407準拠: for( NSString *file in filesInput) (2212行目)
         for (String file : filesInput) {
             // HOROS-20240407準拠: if( [[file commonPrefixWithString: INpath options:
@@ -1208,15 +1540,15 @@ public class BrowserController extends JFrame {
                 newFilesToCopyList.add(file);
             }
         }
-
+        
         boolean copyFiles = false;
         if (copyDatabase && !newFilesToCopyList.isEmpty()) {
             copyFiles = true;
         }
-
+        
         // HOROS-20240407準拠: if( [[options objectForKey: @"async"] boolValue]) (2282行目)
         boolean async = options != null && Boolean.TRUE.equals(options.get("async"));
-
+        
         if (async) {
             // HOROS-20240407準拠: NSMutableDictionary *dict = [NSMutableDictionary
             // dictionaryWithObjectsAndKeys: filesInput, @"filesInput", ...]; (2284行目)
@@ -1226,7 +1558,7 @@ public class BrowserController extends JFrame {
             }
             dict.put("filesInput", filesInput); // HOROS-20240407準拠: filesInputをそのまま使用（newFilesToCopyListではなく）
             dict.put("copyFiles", copyFiles);
-
+            
             // HOROS-20240407準拠: NSThread *t = [[[NSThread alloc]
             // initWithTarget:_database.independentDatabase
             // selector:@selector(copyFilesThread:) object: dict] autorelease]; (2289行目)
@@ -1235,7 +1567,7 @@ public class BrowserController extends JFrame {
             Thread thread = new Thread(() -> {
                 database.copyFilesThread(dict);
             });
-
+            
             // HOROS-20240407準拠: t.name = NSLocalizedString( @"Copying and indexing
             // files...", nil); (2294行目)
             if (copyFiles) {
@@ -1248,7 +1580,7 @@ public class BrowserController extends JFrame {
                 if (options != null && Boolean.TRUE.equals(options.get("mountedVolume"))) {
                     thread.setName("Indexing files from CD/DVD...");
                 } else {
-                    thread.setName("Indexing files...");
+            thread.setName("Indexing files...");
                 }
             }
 
@@ -1272,7 +1604,7 @@ public class BrowserController extends JFrame {
     // HOROS-20240407準拠: NSArray *outlineViewArray, *originalOutlineViewArray;
     // (124行目)
     private List<Object> outlineViewArray = new ArrayList<>();
-
+    
     /**
      * アウトラインビューを更新
      * HOROS-20240407準拠: - (void)outlineViewRefresh (BrowserController.m)
@@ -1286,37 +1618,51 @@ public class BrowserController extends JFrame {
         if (isRefreshingOutline)
             return;
         isRefreshingOutline = true;
-
+        
         try {
-            if (database == null || albumTable == null)
+            if (database == null || albumTable == null) {
+                System.out.println("[DEBUG] outlineViewRefresh() - database or albumTable is null");
                 return;
-
+            }
+            
             // HOROS-20240407準拠: 選択されたアルバムからスタディを取得
             List<com.jj.dicomviewer.model.DicomAlbum> albumArray = getAlbumArray();
             int selectedRow = albumTable.getSelectedRow();
-
+            System.out.println("[DEBUG] outlineViewRefresh() - selectedRow: " + selectedRow + ", albumArray.size(): " + albumArray.size());
+            
             synchronized (outlineViewArray) {
                 outlineViewArray.clear();
-
+                
                 if (selectedRow >= 0 && selectedRow < albumArray.size()) {
                     com.jj.dicomviewer.model.DicomAlbum selectedAlbum = albumArray.get(selectedRow);
-
+                    
                     if (selectedAlbum != null) {
                         // HOROS-20240407準拠: "Database"アルバムの場合は全スタディを表示
                         if ("Database".equals(selectedAlbum.getName())) {
                             // HOROS-20240407準拠: Databaseアルバムは全スタディを含む
                             try {
-                                outlineViewArray.addAll(database.getAllStudies());
+                                List<com.jj.dicomviewer.model.DicomStudy> allStudies = database.getAllStudies();
+                                System.out.println("[DEBUG] outlineViewRefresh() - database.getAllStudies() returned " + (allStudies != null ? allStudies.size() : 0) + " studies");
+                                if (allStudies != null && !allStudies.isEmpty()) {
+                                    outlineViewArray.addAll(allStudies);
+                                    System.out.println("[DEBUG] outlineViewRefresh() - added " + outlineViewArray.size() + " studies to outlineViewArray");
+                                } else {
+                                    System.out.println("[DEBUG] outlineViewRefresh() - no studies in database");
+                                }
                             } catch (Exception e) {
                                 // HOROS-20240407準拠: @catch (NSException * e) { N2LogExceptionWithStackTrace(e);
                                 // }
-                                // TODO: ログ出力（HOROS-20240407準拠のログシステムを使用）
+                                System.out.println("[DEBUG] outlineViewRefresh() - exception getting studies: " + e.getMessage());
+                                e.printStackTrace();
                             }
                         } else if (selectedAlbum.getStudies() != null) {
                             // HOROS-20240407準拠: 通常のアルバムの場合はアルバムのスタディを表示
                             outlineViewArray.addAll(selectedAlbum.getStudies());
+                            System.out.println("[DEBUG] outlineViewRefresh() - added " + selectedAlbum.getStudies().size() + " studies from album");
                         }
                     }
+                } else {
+                    System.out.println("[DEBUG] outlineViewRefresh() - no album selected or invalid selectedRow");
                 }
             }
 
@@ -1351,7 +1697,7 @@ public class BrowserController extends JFrame {
                     }
                 }
             }
-
+            
             // HOROS-20240407準拠: アウトラインビューを更新
             if (databaseOutline != null) {
                 SwingUtilities.invokeLater(() -> {
@@ -1371,17 +1717,22 @@ public class BrowserController extends JFrame {
                         if (model instanceof DatabaseOutlineView.DatabaseOutlineTreeTableModel) {
                             DatabaseOutlineView.DatabaseOutlineTreeTableModel treeTableModel = (DatabaseOutlineView.DatabaseOutlineTreeTableModel) model;
                             // HOROS-20240407準拠: TreeModelSupportを使って構造変更を通知
+                            System.out.println("[DEBUG] outlineViewRefresh() - calling fireTreeStructureChanged()");
                             treeTableModel.fireTreeStructureChanged();
+                            System.out.println("[DEBUG] outlineViewRefresh() - fireTreeStructureChanged() completed");
                         }
                     }
+                    System.out.println("[DEBUG] outlineViewRefresh() - calling databaseOutline.revalidate() and repaint()");
+                    databaseOutline.revalidate();
                     databaseOutline.repaint();
+                    System.out.println("[DEBUG] outlineViewRefresh() - databaseOutline rowCount: " + databaseOutline.getRowCount());
                 });
             }
         } finally {
             isRefreshingOutline = false;
         }
     }
-
+    
     /**
      * マトリックスを更新
      * HOROS-20240407準拠: - (void)refreshMatrix: (id) sender (5232行目)
@@ -1390,9 +1741,9 @@ public class BrowserController extends JFrame {
     public void refreshMatrix(Object sender) {
         // HOROS-20240407準拠: [previousItem release]; previousItem = nil;
         previousItem = null; // これによりマトリックスの更新が強制される
-
+        
         boolean firstResponderMatrix = false;
-
+        
         // HOROS-20240407準拠: if( [[self window] firstResponder] == oMatrix && ...)
         Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
         if (focusOwner == oMatrix && focusOwner != searchField) {
@@ -1400,23 +1751,23 @@ public class BrowserController extends JFrame {
             databaseOutline.requestFocus();
             firstResponderMatrix = true;
         }
-
+        
         // HOROS-20240407準拠: [[NSNotificationCenter defaultCenter] postNotificationName:
         // NSOutlineViewSelectionDidChangeNotification ...]
         // アウトライン選択変更通知を送信（これによりoutlineViewSelectionDidChangeが呼ばれる）
         outlineViewSelectionDidChange();
-
+        
         // HOROS-20240407準拠: [imageView display];
         if (imageView != null) {
             imageView.repaint();
         }
-
+        
         // HOROS-20240407準拠: if( firstResponderMatrix && ...)
         if (firstResponderMatrix && focusOwner != searchField) {
             oMatrix.requestFocus();
         }
     }
-
+    
     /**
      * アウトライン選択変更通知
      * HOROS-20240407準拠: - (void)outlineViewSelectionDidChange:(NSNotification
@@ -1424,29 +1775,34 @@ public class BrowserController extends JFrame {
      * 完全実装：選択変更時のマトリックス更新、プレビュー更新、比較スタディの検索
      */
     public void outlineViewSelectionDidChange() {
+        System.out.println("[DEBUG] outlineViewSelectionDidChange() called");
         // HOROS-20240407準拠: if( [NSThread isMainThread] == NO)
         if (!SwingUtilities.isEventDispatchThread()) {
+            System.out.println("[DEBUG] outlineViewSelectionDidChange() - not on EDT, invoking later");
             SwingUtilities.invokeLater(this::outlineViewSelectionDidChange);
             return;
         }
-
+        
         // HOROS-20240407準拠: if( loadingIsOver == NO) return;
+        System.out.println("[DEBUG] outlineViewSelectionDidChange() - loadingIsOver: " + loadingIsOver);
         if (!loadingIsOver) {
+            System.out.println("[DEBUG] outlineViewSelectionDidChange() - early return due to loadingIsOver == false");
             return;
         }
-
+        
         try {
             // HOROS-20240407準拠: キャッシュをクリア
             // cachedFilesForDatabaseOutlineSelectionSelectedFiles = nil;
-
+            
             Object item = databaseOutline.getSelectedItem();
-
+            System.out.println("[DEBUG] outlineViewSelectionDidChange() - selected item: " + item);
+            
             boolean refreshMatrix = true;
             int nowFiles = 0;
             if (item != null) {
                 nowFiles = getItemFileCount(item);
             }
-
+            
             // HOROS-20240407準拠: if( item == previousItem || ...)
             if (item == previousItem || (previousItem != null && item != null && previousItem.equals(item))) {
                 if (nowFiles == previousNoOfFiles) {
@@ -1455,9 +1811,9 @@ public class BrowserController extends JFrame {
             } else {
                 DatabaseIsEdited = false;
             }
-
+            
             previousNoOfFiles = nowFiles;
-
+            
             if (refreshMatrix && item != null) {
                 // HOROS-20240407準拠: データベースロック
                 synchronized (database) {
@@ -1466,17 +1822,17 @@ public class BrowserController extends JFrame {
                         animationSlider.setMaximum(0);
                         animationSlider.setValue(0);
                     }
-
+                    
                     // HOROS-20240407準拠: matrixViewArray = [[self childrenArray: item] retain];
                     matrixViewArray = new ArrayList<>(childrenArray(item, false));
-
+                    
                     // HOROS-20240407準拠: [self matrixInit: matrixViewArray.count];
                     matrixInit(matrixViewArray.size());
-
+                    
                     // HOROS-20240407準拠: files = [self imagesArray: item
                     // preferredObject:oFirstForFirst];
                     List<Object> files = imagesArray(item, oFirstForFirst);
-
+                    
                     // HOROS-20240407準拠: サムネイル配列を初期化
                     synchronized (previewPixThumbnails) {
                         previewPixThumbnails.clear();
@@ -1484,15 +1840,25 @@ public class BrowserController extends JFrame {
                             previewPixThumbnails.add(null); // notFoundImage相当
                         }
                     }
-
+                    
                     // HOROS-20240407準拠: アイコン読み込みスレッドを開始
                     // TODO: matrixLoadIconsThreadの実装
                 }
             }
-
+            
             if (previousItem != item) {
                 previousItem = item;
-
+                
+                // HOROS-20240407準拠: BrowserController.m 6739-6756行目
+                // previousItemが設定された後、DBリストの背景色を更新するため、databaseOutlineを再描画
+                // HOROS-20240407準拠: willDisplayCellでpreviousItemと比較するため、
+                // previousItemが設定されていれば自動的に背景色が変更される
+                SwingUtilities.invokeLater(() -> {
+                    if (databaseOutline != null) {
+                        databaseOutline.repaint();
+                    }
+                });
+                
                 // HOROS-20240407準拠: COMPARATIVE STUDIES
                 Object studySelected = getStudyFromItem(item);
                 if (studySelected != null) {
@@ -1501,30 +1867,36 @@ public class BrowserController extends JFrame {
                         comparativePatientUID = patientUID;
                         comparativeStudies = null;
                         if (comparativeTable != null) {
-                            // comparativeTable.reloadData();
+                            // HOROS-20240407準拠: comparativeTableをクリア
+                            SwingUtilities.invokeLater(() -> {
+                                javax.swing.table.DefaultTableModel model = 
+                                    (javax.swing.table.DefaultTableModel) comparativeTable.getModel();
+                                model.setRowCount(0);
+                            });
                         }
 
                         // HOROS-20240407準拠: [NSThread detachNewThreadSelector:
                         // @selector(searchForComparativeStudies:) ...]
+                        System.out.println("[DEBUG] outlineViewSelectionDidChange() - calling searchForComparativeStudies() for patientUID: " + patientUID);
                         Thread thread = new Thread(() -> searchForComparativeStudies(studySelected));
                         thread.setName("Search for comparative studies");
                         ThreadsManager.defaultManager().addThreadAndStart(thread);
-                    }
-                    
-                    // HOROS-20240407準拠: BrowserController.m 5184-5192行目
-                    // 履歴パネル（comparativeTable）の行選択を同期
-                    if (comparativeStudies != null && !comparativeStudies.isEmpty() && comparativeTable != null) {
+                    } else if (comparativeStudies != null && !comparativeStudies.isEmpty()) {
+                        // HOROS-20240407準拠: BrowserController.m 5184-5192行目
+                        // 履歴パネル（comparativeTable）の行選択を同期
                         String studyInstanceUID = getStudyInstanceUID(studySelected);
                         if (studyInstanceUID != null) {
                             // HOROS-20240407準拠: comparativeStudiesから同じstudyInstanceUIDを持つスタディのインデックスを検索
                             int index = findStudyIndexInComparativeStudies(studyInstanceUID);
-                            if (index >= 0) {
+                            if (index >= 0 && comparativeTable != null) {
                                 // HOROS-20240407準拠: [comparativeTable selectRowIndexes: [NSIndexSet indexSetWithIndex: index] byExtendingSelection: NO];
                                 SwingUtilities.invokeLater(() -> {
-                                    comparativeTable.setRowSelectionInterval(index, index);
-                                    comparativeTable.scrollRectToVisible(comparativeTable.getCellRect(index, 0, true));
+                                    if (index < comparativeTable.getRowCount()) {
+                                        comparativeTable.setRowSelectionInterval(index, index);
+                                        comparativeTable.scrollRectToVisible(comparativeTable.getCellRect(index, 0, true));
+                                    }
                                 });
-                            } else {
+                            } else if (comparativeTable != null) {
                                 // HOROS-20240407準拠: 見つからない場合は最初の行を選択
                                 SwingUtilities.invokeLater(() -> {
                                     if (comparativeTable.getRowCount() > 0) {
@@ -1542,14 +1914,16 @@ public class BrowserController extends JFrame {
                     if (comparativeTable != null) {
                         SwingUtilities.invokeLater(() -> {
                             // HOROS-20240407準拠: [comparativeTable reloadData];
-                            // TODO: comparativeTableのモデルを更新
+                            javax.swing.table.DefaultTableModel model = 
+                                (javax.swing.table.DefaultTableModel) comparativeTable.getModel();
+                            model.setRowCount(0);
                         });
                     }
                 }
             }
-
+            
             resetROIsAndKeysButton();
-
+            
         } catch (Exception e) {
             // HOROS-20240407準拠: @catch (NSException * e) { N2LogExceptionWithStackTrace(e);
             // }
@@ -1557,7 +1931,7 @@ public class BrowserController extends JFrame {
             // e.printStackTrace(); // デバッグ用（コメントアウト）
         }
     }
-
+    
     /**
      * データベースアウトラインを選択
      * HOROS-20240407準拠: - (void) selectDatabaseOutline (5227行目)
@@ -1565,16 +1939,23 @@ public class BrowserController extends JFrame {
     public void selectDatabaseOutline() {
         databaseOutline.requestFocus();
     }
-
+    
     /**
      * データベースが押されたときの処理
      * HOROS-20240407準拠: - (IBAction)databasePressed: (id) sender
-     * (BrowserController.m)
+     * (BrowserController.m 7899-7902行目)
+     * HOROS-20240407準拠: [self resetROIsAndKeysButton];
      */
     public void databasePressed(DatabaseOutlineView sender) {
-        // TODO: 実装
+        System.out.println("[DEBUG] databasePressed() called");
+        // HOROS-20240407準拠: BrowserController.m 7901行目
+        resetROIsAndKeysButton();
+        
+        // HOROS-20240407準拠: NSOutlineViewSelectionDidChangeNotificationが通知として送信される
+        // Java Swingでは、選択変更時にoutlineViewSelectionDidChangeを呼び出す必要がある
+        outlineViewSelectionDidChange();
     }
-
+    
     /**
      * データベースがダブルクリックされたときの処理
      * HOROS-20240407準拠: - (IBAction)databaseDoublePressed: (id) sender
@@ -1583,7 +1964,7 @@ public class BrowserController extends JFrame {
     public void databaseDoublePressed(DatabaseOutlineView sender) {
         // TODO: 実装
     }
-
+    
     /**
      * アウトラインビューの配列を取得
      * HOROS-20240407準拠: - (NSArray*)outlineViewArray (BrowserController.m)
@@ -1594,7 +1975,7 @@ public class BrowserController extends JFrame {
             return new ArrayList<>(outlineViewArray);
         }
     }
-
+    
     /**
      * プレビューのスクロールホイール処理
      * HOROS-20240407準拠: - (void)previewScrollWheel: (float) deltaY
@@ -1604,7 +1985,7 @@ public class BrowserController extends JFrame {
         // TODO: 実装
         // HOROS-20240407準拠: プレビュービューのスクロール処理
     }
-
+    
     /**
      * マトリックスを取得
      * HOROS-20240407準拠: - (BrowserMatrix*)oMatrix (BrowserController.h)
@@ -1612,7 +1993,7 @@ public class BrowserController extends JFrame {
     public BrowserMatrix getMatrix() {
         return oMatrix;
     }
-
+    
     /**
      * 子要素の配列を取得
      * HOROS-20240407準拠: - (NSArray*)childrenArray: (id) parent recursive: (BOOL)
@@ -1642,7 +2023,7 @@ public class BrowserController extends JFrame {
     // HOROS-20240407準拠: BrowserController.h 255行目 IBOutlet NSTableView*
     // _activityTableView;
     private javax.swing.JTable activityTableView;
-
+    
     /**
      * Activityテーブルビューを取得
      * HOROS-20240407準拠: - (NSTableView*)_activityTableView
@@ -1651,12 +2032,12 @@ public class BrowserController extends JFrame {
     public javax.swing.JTable getActivityTableView() {
         return activityTableView;
     }
-
+    
     // HOROS-20240407準拠: ソート関連のフィールド
     // HOROS-20240407準拠: ソート状態は保存/復元される（NSUserDefaults相当）
     private String sortColumn = null;
     private boolean sortAscending = true;
-
+    
     /**
      * ソート列を取得
      * HOROS-20240407準拠: - (NSString*)sortColumn (BrowserController.m)
@@ -1672,7 +2053,7 @@ public class BrowserController extends JFrame {
     public boolean isSortAscending() {
         return sortAscending;
     }
-
+    
     /**
      * ソート順を取得
      * HOROS-20240407準拠: - (BOOL)sortAscending (BrowserController.m)
@@ -1680,7 +2061,7 @@ public class BrowserController extends JFrame {
     public boolean getSortAscending() {
         return sortAscending;
     }
-
+    
     /**
      * ソート列を設定
      * HOROS-20240407準拠: - (void)setSortColumn: (NSString*) column ascending: (BOOL)
@@ -1805,7 +2186,7 @@ public class BrowserController extends JFrame {
             this.sortAscending = true;
         }
     }
-
+    
     /**
      * マトリックスが押されたときの処理
      * HOROS-20240407準拠: - (IBAction)matrixPressed: (id) sender (9298行目)
@@ -1815,22 +2196,22 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: id theCell = [sender selectedCell];
         javax.swing.JButton selectedCell = sender.selectedCell();
         int index = -1;
-
+        
         // HOROS-20240407準拠: [self.window makeFirstResponder: oMatrix];
         oMatrix.requestFocus();
-
+        
         if (selectedCell != null) {
             // HOROS-20240407準拠: if( [theCell tag] >= 0)
             Object tagObj = selectedCell.getClientProperty("tag");
             if (tagObj instanceof Integer) {
                 index = (Integer) tagObj;
             }
-
+            
             if (index >= 0) {
                 // HOROS-20240407準拠: NSManagedObject *dcmFile = [databaseOutline
                 // itemAtRow:[databaseOutline selectedRow]];
                 Object dcmFile = databaseOutline.getSelectedItem();
-
+                
                 if (dcmFile != null) {
                     // HOROS-20240407準拠: if( [[dcmFile valueForKey:@"type"] isEqualToString:
                     // @"Series"] && ...)
@@ -1850,17 +2231,17 @@ public class BrowserController extends JFrame {
                 }
             }
         }
-
+        
         // HOROS-20240407準拠: [animationSlider setEnabled:NO];
         if (animationSlider != null) {
             animationSlider.setEnabled(false);
             animationSlider.setMaximum(0);
             animationSlider.setValue(0);
         }
-
+        
         if (index >= 0) {
             Object dcmFile = databaseOutline.getSelectedItem();
-
+            
             if (dcmFile != null) {
                 String type = getItemType(dcmFile);
                 // HOROS-20240407準拠: if( [[dcmFile valueForKey:@"type"] isEqualToString:
@@ -1871,16 +2252,16 @@ public class BrowserController extends JFrame {
                         imageView.setIndex(index);
                     }
                 }
-
+                
                 // HOROS-20240407準拠: [self initAnimationSlider];
                 initAnimationSlider();
             }
         }
-
+        
         // HOROS-20240407準拠: [self resetROIsAndKeysButton];
         resetROIsAndKeysButton();
     }
-
+    
     /**
      * マトリックスがダブルクリックされたときの処理
      * HOROS-20240407準拠: - (IBAction) matrixDoublePressed:(id)sender (9381行目)
@@ -1896,7 +2277,7 @@ public class BrowserController extends JFrame {
             }
         }
     }
-
+    
     /**
      * アルバムを追加
      * HOROS-20240407準拠: - (void)addAlbum: (id) sender (BrowserController.m)
@@ -1909,7 +2290,7 @@ public class BrowserController extends JFrame {
             // database.addAlbum(album);
         }
     }
-
+    
     /**
      * スマートアルバムを追加
      * HOROS-20240407準拠: - (void)addSmartAlbum: (id) sender (BrowserController.m)
@@ -1922,7 +2303,7 @@ public class BrowserController extends JFrame {
             // database.addAlbum(album);
         }
     }
-
+    
     /**
      * アルバムを削除
      * HOROS-20240407準拠: - (void)removeAlbum: (id) album (BrowserController.m)
@@ -1933,10 +2314,10 @@ public class BrowserController extends JFrame {
             // database.removeAlbum(album);
         }
     }
-
+    
     // ========== スレッド関連メソッド ==========
     // HOROS-20240407準拠: BrowserController.m のスレッド関連メソッドを復元
-
+    
     /**
      * ファイルコピースレッド
      * HOROS-20240407準拠: - (void) copyFilesThread: (NSDictionary*) dict (2105行目)
@@ -1949,7 +2330,7 @@ public class BrowserController extends JFrame {
             database.copyFilesThread(dict);
         }
     }
-
+    
     /**
      * 自動コメント再生成スレッド
      * HOROS-20240407準拠: - (void) regenerateAutoCommentsThread: (NSDictionary*)
@@ -1961,68 +2342,68 @@ public class BrowserController extends JFrame {
                 // HOROS-20240407準拠: NSManagedObjectContext *context =
                 // self.database.independentContext;
                 // TODO: データベースの独立コンテキストを取得
-
+                
                 @SuppressWarnings("unchecked")
                 List<Object> studiesArray = (List<Object>) arrays.get("studyArrayIDs");
                 @SuppressWarnings("unchecked")
                 List<Object> seriesArray = (List<Object>) arrays.get("seriesArrayIDs");
-
+                
                 // HOROS-20240407準拠: NSString *commentField = [[NSUserDefaults
                 // standardUserDefaults] stringForKey: @"commentFieldForAutoFill"];
                 String commentField = "comment"; // TODO: UserDefaultsから取得
-
+                
                 // HOROS-20240407準拠: BOOL studyLevel = [[NSUserDefaults standardUserDefaults]
                 // boolForKey: @"COMMENTSAUTOFILLStudyLevel"];
                 boolean studyLevel = false; // TODO: UserDefaultsから取得
-
+                
                 // HOROS-20240407準拠: BOOL seriesLevel = [[NSUserDefaults standardUserDefaults]
                 // boolForKey: @"COMMENTSAUTOFILLSeriesLevel"];
                 boolean seriesLevel = false; // TODO: UserDefaultsから取得
-
+                
                 // HOROS-20240407準拠: BOOL commentsAutoFill = [[NSUserDefaults
                 // standardUserDefaults] boolForKey: @"COMMENTSAUTOFILL"];
                 boolean commentsAutoFill = false; // TODO: UserDefaultsから取得
-
+                
                 if (studiesArray != null) {
                     int x = 0;
                     for (Object studyID : studiesArray) {
                         // HOROS-20240407準拠: DicomStudy *s = (DicomStudy*) [context objectWithID:
                         // studyID];
                         // TODO: スタディを取得してコメントをリセット
-
+                        
                         // HOROS-20240407準拠: float p = (float) (x++) / (float) studiesArray.count;
                         double progress = (double) (x++) / studiesArray.size();
                         ThreadsManager.defaultManager().setThreadProgress(Thread.currentThread(), progress);
-
+                        
                         // HOROS-20240407準拠: if( [[NSThread currentThread] isCancelled])
                         if (ThreadsManager.defaultManager().isCancelled(Thread.currentThread())) {
                             break;
                         }
                     }
                 }
-
+                
                 if (seriesArray != null) {
                     int i = 0;
                     for (Object seriesID : seriesArray) {
                         // HOROS-20240407準拠: DicomSeries *series = (DicomSeries*) [context objectWithID:
                         // seriesID];
                         // TODO: シリーズを取得してコメントを処理
-
+                        
                         // HOROS-20240407準拠: float p = (float) (i++) / (float) seriesArray.count;
                         double progress = (double) (i++) / seriesArray.size();
                         ThreadsManager.defaultManager().setThreadProgress(Thread.currentThread(), progress);
-
+                        
                         // HOROS-20240407準拠: if( [[NSThread currentThread] isCancelled])
                         if (ThreadsManager.defaultManager().isCancelled(Thread.currentThread())) {
                             break;
                         }
                     }
                 }
-
+                
                 // HOROS-20240407準拠: [self performSelectorOnMainThread: @selector(
                 // outlineViewRefresh) withObject: nil waitUntilDone: NO];
                 SwingUtilities.invokeLater(() -> outlineViewRefresh());
-
+                
             } catch (Exception e) {
                 // HOROS-20240407準拠: @catch (NSException * e) { N2LogExceptionWithStackTrace(e);
                 // }
@@ -2030,11 +2411,11 @@ public class BrowserController extends JFrame {
                 // e.printStackTrace(); // デバッグ用（コメントアウト）
             }
         });
-
+        
         thread.setName("Regenerating auto comments...");
         ThreadsManager.defaultManager().addThreadAndStart(thread);
     }
-
+    
     /**
      * 自動コメント再生成
      * HOROS-20240407準拠: - (IBAction) regenerateAutoComments:(id) sender (1264行目)
@@ -2042,20 +2423,20 @@ public class BrowserController extends JFrame {
     public void regenerateAutoComments(Object sender) {
         // TODO: 確認ダイアログを表示
         // HOROS-20240407準拠: NSRunInformationalAlertPanel
-
+        
         // 選択されたスタディとシリーズを取得
         List<Object> studiesArray = new ArrayList<>();
         List<Object> seriesArray = new ArrayList<>();
-
+        
         // TODO: 選択されたアイテムからIDを取得
-
+        
         Map<String, Object> arrays = new HashMap<>();
         arrays.put("studyArrayIDs", studiesArray);
         arrays.put("seriesArrayIDs", seriesArray);
-
+        
         regenerateAutoCommentsThread(arrays);
     }
-
+    
     /**
      * 非同期WADOダウンロード
      * HOROS-20240407準拠: - (void) asyncWADODownload:(NSString*) filename (824行目)
@@ -2065,7 +2446,7 @@ public class BrowserController extends JFrame {
             try {
                 // HOROS-20240407準拠: NSMutableArray *urlToDownloads = [NSMutableArray array];
                 List<java.net.URL> urlToDownloads = new ArrayList<>();
-
+                
                 // HOROS-20240407準拠: NSArray *urlsR = [[NSString
                 // stringWithContentsOfFile:filename usedEncoding:NULL error:NULL]
                 // componentsSeparatedByString: @"\r"];
@@ -2074,12 +2455,12 @@ public class BrowserController extends JFrame {
                 // componentsSeparatedByString: @"\n"];
                 java.nio.file.Path path = java.nio.file.Paths.get(filename);
                 String content = new String(java.nio.file.Files.readAllBytes(path));
-
+                
                 String[] urlsR = content.split("\r");
                 String[] urlsN = content.split("\n");
-
+                
                 String[] urls = urlsR.length >= urlsN.length ? urlsR : urlsN;
-
+                
                 for (String url : urls) {
                     if (url != null && !url.trim().isEmpty()) {
                         try {
@@ -2089,16 +2470,16 @@ public class BrowserController extends JFrame {
                         }
                     }
                 }
-
+                
                 // HOROS-20240407準拠: WADODownload *downloader = [[[WADODownload alloc] init]
                 // autorelease];
                 // HOROS-20240407準拠: [downloader WADODownload: urlToDownloads];
                 // TODO: WADODownloadの実装
-
+                
                 // HOROS-20240407準拠: [[NSFileManager defaultManager] removeItemAtPath: filename
                 // error: nil];
                 java.nio.file.Files.deleteIfExists(path);
-
+                
             } catch (Exception e) {
                 // HOROS-20240407準拠: @catch (NSException * e) { N2LogExceptionWithStackTrace(e);
                 // }
@@ -2106,11 +2487,11 @@ public class BrowserController extends JFrame {
                 // e.printStackTrace(); // デバッグ用（コメントアウト）
             }
         });
-
+        
         thread.setName("WADO Download");
         ThreadsManager.defaultManager().addThreadAndStart(thread);
     }
-
+    
     /**
      * 画像処理スレッド（vImage相当）
      * HOROS-20240407準拠: - (void) vImageThread: (NSDictionary*) d (582行目)
@@ -2121,9 +2502,9 @@ public class BrowserController extends JFrame {
         // @"src"] pointerValue];
         // HOROS-20240407準拠: vImage_Buffer dst = *(vImage_Buffer*) [[d objectForKey:
         // @"dst"] pointerValue];
-
+        
         String what = (String) d.get("what");
-
+        
         if ("FTo16U".equals(what)) {
             // HOROS-20240407準拠: vImageConvert_FTo16U(&src, &dst, offset, scale,
             // kvImageDoNotTile);
@@ -2138,7 +2519,7 @@ public class BrowserController extends JFrame {
             // デバッグ用（コメントアウト）
         }
     }
-
+    
     /**
      * マルチスレッド画像変換
      * HOROS-20240407準拠: + (void) multiThreadedImageConvert: (NSString*) what
@@ -2149,19 +2530,19 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: int mpprocessors = [[NSProcessInfo processInfo]
         // processorCount];
         int mpprocessors = Runtime.getRuntime().availableProcessors();
-
+        
         // HOROS-20240407準拠: static NSConditionLock *threadLock = nil;
         // TODO: スレッドロックの実装（JavaではCountDownLatchまたはCyclicBarrierを使用）
-
+        
         // HOROS-20240407準拠: for( int i = 0; i < mpprocessors; i++)
         // HOROS-20240407準拠: [NSThread detachNewThreadSelector: @selector(vImageThread:)
         // toTarget: browserWindow withObject: d];
         // TODO: マルチスレッド画像変換を実装
     }
-
+    
     // ========== ヘルパーメソッド ==========
     // HOROS-20240407準拠: UI関連のヘルパーメソッド
-
+    
     /**
      * アイテムのタイプを取得
      */
@@ -2176,7 +2557,7 @@ public class BrowserController extends JFrame {
             return "Image";
         return null;
     }
-
+    
     /**
      * アイテムのファイル数を取得
      */
@@ -2193,7 +2574,7 @@ public class BrowserController extends JFrame {
         }
         return 0;
     }
-
+    
     /**
      * アイテムの画像数を取得
      */
@@ -2205,7 +2586,7 @@ public class BrowserController extends JFrame {
         }
         return 0;
     }
-
+    
     /**
      * アイテムからスタディを取得
      */
@@ -2223,7 +2604,7 @@ public class BrowserController extends JFrame {
         }
         return null;
     }
-
+    
     /**
      * 患者UIDを取得
      */
@@ -2243,6 +2624,40 @@ public class BrowserController extends JFrame {
             return ((com.jj.dicomviewer.model.DicomStudy) study).getStudyInstanceUID();
         }
         return null;
+    }
+    
+    /**
+     * comparativePatientUIDを取得
+     * HOROS-20240407準拠: BrowserController.m 497行目 - @synthesize comparativePatientUID
+     * DatabaseOutlineViewのセルレンダラーから使用される
+     */
+    public String getComparativePatientUID() {
+        return comparativePatientUID;
+    }
+    
+    /**
+     * 選択された行の患者UIDを取得
+     * HOROS-20240407準拠: BrowserController.m 6739-6756行目
+     * willDisplayCellでpreviousItemの患者UIDと比較するため
+     */
+    public String getSelectedPatientUID() {
+        if (previousItem == null) {
+            return null;
+        }
+        Object study = getStudyFromItem(previousItem);
+        if (study != null) {
+            return getPatientUID(study);
+        }
+        return null;
+    }
+    
+    /**
+     * previousItemを取得
+     * HOROS-20240407準拠: BrowserController.m 6745行目 - [[previousItem valueForKey: @"type"] isEqualToString:@"Study"]
+     * willDisplayCellでpreviousItemと比較するため
+     */
+    public Object getPreviousItem() {
+        return previousItem;
     }
 
     /**
@@ -2401,7 +2816,7 @@ public class BrowserController extends JFrame {
             return "";
         }
     }
-
+    
     /**
      * 画像配列を取得
      * HOROS-20240407準拠: - (NSArray*)imagesArray: (id) item
@@ -2426,7 +2841,7 @@ public class BrowserController extends JFrame {
         }
         return result;
     }
-
+    
     /**
      * マトリックス初期化
      * HOROS-20240407準拠: - (void) matrixInit:(long) noOfImages (9391行目)
@@ -2438,17 +2853,17 @@ public class BrowserController extends JFrame {
             if (previewPixThumbnails != null)
                 previewPixThumbnails.clear();
         }
-
+        
         synchronized (this) {
             setDCMDone = false;
             loadPreviewIndex = 0;
-
+            
             if (oMatrix != null) {
                 int rows = oMatrix.getRows();
                 int columns = oMatrix.getColumns();
                 if (columns < 1)
                     columns = 1;
-
+                
                 for (long i = 0; i < rows * columns; i++) {
                     int row = (int) (i / columns);
                     int col = (int) (i % columns);
@@ -2461,13 +2876,13 @@ public class BrowserController extends JFrame {
                     }
                 }
             }
-
+            
             if (imageView != null) {
                 imageView.setPixels(null);
             }
         }
     }
-
+    
     /**
      * アニメーションスライダー初期化
      * HOROS-20240407準拠: - (void) initAnimationSlider (8861行目)
@@ -2476,22 +2891,22 @@ public class BrowserController extends JFrame {
         if (animationSlider == null) {
             animationSlider = new javax.swing.JSlider();
         }
-
+        
         boolean animate = false;
         long noOfImages = 0;
-
+        
         javax.swing.JButton cell = oMatrix != null ? oMatrix.selectedCell() : null;
-
+        
         if (cell != null) {
             Object tagObj = cell.getClientProperty("tag");
             int tag = tagObj instanceof Integer ? (Integer) tagObj : -1;
-
+            
             if (tag >= 0 && matrixViewArray != null && tag < matrixViewArray.size()) {
                 Object aFile = databaseOutline.getSelectedItem();
-
+                
                 if (aFile != null) {
                     String type = getItemType(aFile);
-
+                    
                     if ("Series".equals(type)) {
                         int imageCount = getItemImageCount(aFile);
                         if (imageCount == 1) {
@@ -2520,7 +2935,7 @@ public class BrowserController extends JFrame {
                 }
             }
         }
-
+        
         if (!animate) {
             if (animationSlider != null) {
                 animationSlider.setEnabled(false);
@@ -2532,12 +2947,12 @@ public class BrowserController extends JFrame {
             animationSlider.setMaximum((int) (noOfImages - 1));
             animationSlider.setValue(0);
         }
-
+        
         withReset = true;
         previewSliderAction(animationSlider);
         withReset = false;
     }
-
+    
     /**
      * プレビュースライダーアクション
      * HOROS-20240407準拠: - (void) previewSliderAction:(id) sender (9049行目)
@@ -2546,30 +2961,30 @@ public class BrowserController extends JFrame {
     private void previewSliderAction(Object sender) {
         // HOROS-20240407準拠: 完全実装は非常に複雑（9049-9218行目）
         // 基本的な実装のみ提供（完全実装は段階的に追加）
-
+        
         if (dontUpdatePreviewPane) {
             return;
         }
-
+        
         javax.swing.JButton cell = oMatrix != null ? oMatrix.selectedCell() : null;
         if (cell == null || !cell.isEnabled()) {
             return;
         }
-
+        
         Object tagObj = cell.getClientProperty("tag");
         int index = tagObj instanceof Integer ? (Integer) tagObj : -1;
-
+        
         if (index < 0 || matrixViewArray == null || index >= matrixViewArray.size()) {
             return;
         }
-
+        
         Object aFile = databaseOutline.getSelectedItem();
         if (aFile == null) {
             return;
         }
-
+        
         String type = getItemType(aFile);
-
+        
         // HOROS-20240407準拠: シリーズレベルの処理
         if ("Series".equals(type)) {
             int imageCount = getItemImageCount(aFile);
@@ -2592,7 +3007,7 @@ public class BrowserController extends JFrame {
             }
         }
     }
-
+    
     /**
      * データベーススタディを開く
      * HOROS-20240407準拠: - (void) databaseOpenStudy: (NSManagedObject*) item
@@ -2602,17 +3017,215 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: スタディを開く処理の実装
         // TODO: ViewerControllerの実装が必要
     }
-
+    
     /**
      * 比較スタディを検索
      * HOROS-20240407準拠: - (void) searchForComparativeStudies: (id) studySelectedID
      * (4709行目)
+     * HOROS-20240407準拠: BrowserController.m 4709-4716行目
      */
     private void searchForComparativeStudies(Object studySelectedID) {
-        // HOROS-20240407準拠: 比較スタディの検索実装
-        // TODO: 実装
+        System.out.println("[DEBUG] searchForComparativeStudies() called with studySelectedID: " + studySelectedID);
+        if (database == null || studySelectedID == null) {
+            System.out.println("[DEBUG] searchForComparativeStudies() - database or studySelectedID is null");
+            return;
+        }
+        
+        try {
+            // HOROS-20240407準拠: subSearchForComparativeStudiesを呼び出す
+            List<Object> studies = subSearchForComparativeStudies(studySelectedID);
+            System.out.println("[DEBUG] searchForComparativeStudies() - found " + studies.size() + " studies");
+            
+            // HOROS-20240407準拠: refreshComparativeStudiesをメインスレッドで呼び出す
+            SwingUtilities.invokeLater(() -> {
+                System.out.println("[DEBUG] searchForComparativeStudies() - calling refreshComparativeStudies()");
+                refreshComparativeStudies(studies);
+            });
+        } catch (Exception e) {
+            System.out.println("[DEBUG] searchForComparativeStudies() - exception: " + e.getMessage());
+            e.printStackTrace();
+            // エラーが発生した場合は空のリストを設定
+            SwingUtilities.invokeLater(() -> {
+                refreshComparativeStudies(new ArrayList<>());
+            });
+        }
     }
-
+    
+    /**
+     * 比較スタディをサブ検索
+     * HOROS-20240407準拠: - (NSArray*) subSearchForComparativeStudies: (id) studySelectedID
+     * (4536行目)
+     */
+    private List<Object> subSearchForComparativeStudies(Object studySelectedID) {
+        System.out.println("[DEBUG] subSearchForComparativeStudies() called");
+        List<Object> result = new ArrayList<>();
+        
+        if (database == null || studySelectedID == null) {
+            System.out.println("[DEBUG] subSearchForComparativeStudies() - database or studySelectedID is null");
+            return result;
+        }
+        
+        try {
+            // HOROS-20240407準拠: studySelectedIDからスタディを取得
+            if (!(studySelectedID instanceof com.jj.dicomviewer.model.DicomStudy)) {
+                System.out.println("[DEBUG] subSearchForComparativeStudies() - studySelectedID is not DicomStudy");
+                // TODO: IDからスタディを取得する処理
+                return result;
+            }
+            
+            com.jj.dicomviewer.model.DicomStudy studySelected = 
+                (com.jj.dicomviewer.model.DicomStudy) studySelectedID;
+            
+            // HOROS-20240407準拠: 患者UIDを取得
+            String patientUID = getPatientUID(studySelected);
+            System.out.println("[DEBUG] subSearchForComparativeStudies() - patientUID: " + patientUID);
+            if (patientUID == null || patientUID.isEmpty()) {
+                System.out.println("[DEBUG] subSearchForComparativeStudies() - patientUID is null or empty");
+                return result;
+            }
+            
+            // HOROS-20240407準拠: 同じ患者UIDを持つスタディを検索
+            // HOROS-20240407準拠: BrowserController.m 4569行目 - ローカルデータベースから検索
+            List<com.jj.dicomviewer.model.DicomStudy> allStudies = database.getAllStudies();
+            System.out.println("[DEBUG] subSearchForComparativeStudies() - allStudies count: " + (allStudies != null ? allStudies.size() : 0));
+            if (allStudies == null || allStudies.isEmpty()) {
+                System.out.println("[DEBUG] subSearchForComparativeStudies() - allStudies is null or empty");
+                return result;
+            }
+            
+            for (com.jj.dicomviewer.model.DicomStudy study : allStudies) {
+                String studyPatientUID = study.getPatientUID();
+                if (studyPatientUID != null && studyPatientUID.equalsIgnoreCase(patientUID)) {
+                    result.add(study);
+                }
+            }
+            System.out.println("[DEBUG] subSearchForComparativeStudies() - matching studies count: " + result.size());
+            
+            // HOROS-20240407準拠: 日付でソート（降順）
+            result.sort((a, b) -> {
+                if (a instanceof com.jj.dicomviewer.model.DicomStudy && 
+                    b instanceof com.jj.dicomviewer.model.DicomStudy) {
+                    com.jj.dicomviewer.model.DicomStudy studyA = (com.jj.dicomviewer.model.DicomStudy) a;
+                    com.jj.dicomviewer.model.DicomStudy studyB = (com.jj.dicomviewer.model.DicomStudy) b;
+                    java.time.LocalDateTime dateA = studyA.getDate();
+                    java.time.LocalDateTime dateB = studyB.getDate();
+                    if (dateA == null && dateB == null) {
+                        return 0;
+                    } else if (dateA == null) {
+                        return 1;
+                    } else if (dateB == null) {
+                        return -1;
+                    } else {
+                        return dateB.compareTo(dateA); // 降順
+                    }
+                }
+                return 0;
+            });
+        } catch (Exception e) {
+            // エラーが発生した場合は空のリストを返す
+            // デバッグ用: エラーをログ出力（本番環境では削除）
+            e.printStackTrace();
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 比較スタディを更新
+     * HOROS-20240407準拠: - (void) refreshComparativeStudies: (NSArray*) newStudies
+     * (4747行目)
+     */
+    private void refreshComparativeStudies(List<Object> newStudies) {
+        System.out.println("[DEBUG] refreshComparativeStudies() called with " + (newStudies != null ? newStudies.size() : 0) + " studies");
+        if (comparativeTable == null) {
+            System.out.println("[DEBUG] refreshComparativeStudies() - comparativeTable is null");
+            return;
+        }
+        
+        try {
+            // HOROS-20240407準拠: comparativeStudiesを設定
+            comparativeStudies = newStudies != null ? new ArrayList<>(newStudies) : new ArrayList<>();
+            
+            // HOROS-20240407準拠: comparativeTableのモデルを更新
+            javax.swing.table.DefaultTableModel model = 
+                (javax.swing.table.DefaultTableModel) comparativeTable.getModel();
+            
+            // モデルをクリア
+            int rowCount = model.getRowCount();
+            System.out.println("[DEBUG] refreshComparativeStudies() - current rowCount: " + rowCount);
+            if (rowCount > 0) {
+                model.setRowCount(0);
+            }
+            
+            // HOROS-20240407準拠: 各スタディをテーブルに追加
+            // HOROS-20240407準拠: BrowserController.m 11369-11393行目
+            // セルレンダラーで表示内容を制御するため、ここではstudyオブジェクトを直接追加
+            for (Object study : comparativeStudies) {
+                if (study instanceof com.jj.dicomviewer.model.DicomStudy) {
+                    // HOROS-20240407準拠: セルレンダラーがスタディ情報を表示するため、studyオブジェクトを直接追加
+                    // セルレンダラーのvalueパラメータから直接DicomStudyを取得できるようにする
+                    model.addRow(new Object[] { study });
+                    System.out.println("[DEBUG] refreshComparativeStudies() - added study: " + 
+                        ((com.jj.dicomviewer.model.DicomStudy) study).getStudyName());
+                }
+            }
+            
+            // HOROS-20240407準拠: [comparativeTable reloadData]相当の処理
+            // モデル変更を通知
+            model.fireTableDataChanged();
+            
+            // HOROS-20240407準拠: テーブルを再描画
+            comparativeTable.revalidate();
+            comparativeTable.repaint();
+            
+            // HOROS-20240407準拠: 現在選択されているスタディと同じstudyInstanceUIDを持つ行を選択
+            Object item = databaseOutline.getSelectedItem();
+            if (item != null) {
+                Object studySelected = getStudyFromItem(item);
+                if (studySelected != null) {
+                    String studyInstanceUID = getStudyInstanceUID(studySelected);
+                    if (studyInstanceUID != null) {
+                        int index = findStudyIndexInComparativeStudies(studyInstanceUID);
+                        if (index >= 0 && index < comparativeTable.getRowCount()) {
+                            comparativeTable.setRowSelectionInterval(index, index);
+                            comparativeTable.scrollRectToVisible(
+                                comparativeTable.getCellRect(index, 0, true));
+                            // HOROS-20240407準拠: 選択行の背景色を確実に表示するため、再描画
+                            // SwingUtilities.invokeLaterで遅延して再描画することで、
+                            // セルレンダラーが正しく呼ばれるようにする
+                            SwingUtilities.invokeLater(() -> {
+                                comparativeTable.repaint();
+                            });
+                        } else if (comparativeTable.getRowCount() > 0) {
+                            // 見つからない場合は最初の行を選択
+                            comparativeTable.setRowSelectionInterval(0, 0);
+                            // HOROS-20240407準拠: 選択行の背景色を確実に表示するため、再描画
+                            SwingUtilities.invokeLater(() -> {
+                                comparativeTable.repaint();
+                            });
+                        }
+                    }
+                    
+                    // HOROS-20240407準拠: BrowserController.m 6739-6756行目
+                    // 選択された行（previousItem）と同じ患者UIDを持つDBリスト行の背景色を変更するため、
+                    // databaseOutlineを再描画
+                    // HOROS-20240407準拠: willDisplayCellでpreviousItemと比較するため、
+                    // previousItemが設定されていれば自動的に背景色が変更される
+                    // HOROS-20240407準拠: databaseOutlineを再描画してセルレンダラーを呼ぶ
+                    SwingUtilities.invokeLater(() -> {
+                        if (databaseOutline != null) {
+                            databaseOutline.repaint();
+                        }
+                    });
+                }
+            }
+        } catch (Exception e) {
+            // エラーが発生した場合はスキップ
+            // デバッグ用: エラーをログ出力（本番環境では削除）
+            e.printStackTrace();
+        }
+    }
+    
     /**
      * ROIとキー画像ボタンをリセット
      * HOROS-20240407準拠: - (void) resetROIsAndKeysButton (4170行目)
@@ -2621,7 +3234,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: ROIとキー画像ボタンのリセット実装
         // TODO: 実装
     }
-
+    
     /**
      * アルバムを更新
      * HOROS-20240407準拠: - (void)refreshAlbums (3571行目)
@@ -2631,7 +3244,7 @@ public class BrowserController extends JFrame {
         if (isRefreshingAlbums)
             return;
         isRefreshingAlbums = true;
-
+        
         try {
             if (database != null) {
                 if (_computingNumberOfStudiesForAlbums) {
@@ -2639,7 +3252,7 @@ public class BrowserController extends JFrame {
                 } else {
                     // アルバムテーブルを更新
                     SwingUtilities.invokeLater(this::updateAlbumTable);
-
+                    
                     Thread thread = new Thread(this::_computeNumberOfStudiesForAlbumsThread);
                     thread.setName("Compute Albums...");
                     ThreadsManager.defaultManager().addThreadAndStart(thread);
@@ -2649,7 +3262,7 @@ public class BrowserController extends JFrame {
             isRefreshingAlbums = false;
         }
     }
-
+    
     /**
      * アルバム更新を遅延
      * HOROS-20240407準拠: - (void)delayedRefreshAlbums (3565行目)
@@ -2660,7 +3273,7 @@ public class BrowserController extends JFrame {
             SwingUtilities.invokeLater(this::refreshAlbums);
         }
     }
-
+    
     /**
      * アルバムのスタディ数を計算するスレッド
      * HOROS-20240407準拠: - (void)_computeNumberOfStudiesForAlbumsThread (3376行目)
@@ -2670,24 +3283,24 @@ public class BrowserController extends JFrame {
             delayedRefreshAlbums();
             return;
         }
-
+        
         _computingNumberOfStudiesForAlbums = true;
-
+        
         Thread currentThread = Thread.currentThread();
         currentThread.setName("Compute Albums...");
         ThreadsManager.defaultManager().addThreadAndStart(currentThread);
-
+        
         try {
             // HOROS-20240407準拠: DicomDatabase* idatabase = [self.database
             // independentDatabase];
             // TODO: 独立データベースの取得とスタディ数の計算
-
+            
         } finally {
             _computingNumberOfStudiesForAlbums = false;
             SwingUtilities.invokeLater(this::delayedRefreshAlbums);
         }
     }
-
+    
     /**
      * アルバム配列を取得
      * HOROS-20240407準拠: - (NSArray*) albumArray (11276行目)
@@ -2695,11 +3308,11 @@ public class BrowserController extends JFrame {
      */
     private List<com.jj.dicomviewer.model.DicomAlbum> getAlbumArray() {
         List<com.jj.dicomviewer.model.DicomAlbum> result = new ArrayList<>();
-
+        
         if (database == null) {
             return result;
         }
-
+        
         // HOROS-20240407準拠: 最初の要素は"Database"アルバム
         // [[NSArray arrayWithObject:[NSDictionary dictionaryWithObject:
         // NSLocalizedString(@"Database", nil) forKey:@"name"]]
@@ -2708,13 +3321,13 @@ public class BrowserController extends JFrame {
         databaseAlbum.setSmartAlbum(false);
         // Databaseアルバムは全スタディを含む（numberOfStudiesは後で計算）
         result.add(databaseAlbum);
-
+        
         // HOROS-20240407準拠: その後にデータベースのアルバムを追加
         result.addAll(database.getAlbums());
-
+        
         return result;
     }
-
+    
     /**
      * アルバム名でアルバムを選択
      * HOROS-20240407準拠: - (void) selectAlbumWithName: (NSString*) name (2863行目)
@@ -2722,7 +3335,7 @@ public class BrowserController extends JFrame {
     public void selectAlbumWithName(String name) {
         if (albumTable == null || database == null)
             return;
-
+        
         List<com.jj.dicomviewer.model.DicomAlbum> albumArray = getAlbumArray();
         for (int i = 0; i < albumArray.size(); i++) {
             com.jj.dicomviewer.model.DicomAlbum album = albumArray.get(i);
@@ -2735,7 +3348,7 @@ public class BrowserController extends JFrame {
             }
         }
     }
-
+    
     /**
      * データベースを更新
      * HOROS-20240407準拠: - (void)refreshDatabase: (id)sender (3585行目)
@@ -2744,29 +3357,29 @@ public class BrowserController extends JFrame {
         // 無限ループ防止: 既に更新中の場合はスキップ
         if (isRefreshingOutline || isRefreshingAlbums || isUpdatingAlbumTable)
             return;
-
+        
         // HOROS-20240407準拠: if( [[AppController sharedAppController] isSessionInactive]
         // || waitForRunningProcess) return;
         // TODO: セッション非アクティブチェック
-
+        
         // HOROS-20240407準拠: if( _database == nil) return;
         if (database == null)
             return;
-
+        
         // HOROS-20240407準拠: if( DatabaseIsEdited) return;
         if (DatabaseIsEdited)
             return;
-
+        
         // HOROS-20240407準拠: if( [databaseOutline editedRow] != -1) return;
         // TODO: アウトラインの編集状態チェック
-
+        
         List<com.jj.dicomviewer.model.DicomAlbum> albumArray = getAlbumArray();
-
+        
         // HOROS-20240407準拠: if( albumTable.selectedRow >= [albumArray count]) return;
         int selectedRow = albumTable.getSelectedRow();
         if (selectedRow < 0 || selectedRow >= albumArray.size())
             return;
-
+        
         // HOROS-20240407準拠: if( [[[albumArray objectAtIndex: albumTable.selectedRow]
         // valueForKey:@"smartAlbum"] boolValue] == YES)
         com.jj.dicomviewer.model.DicomAlbum selectedAlbum = albumArray.get(selectedRow);
@@ -2802,7 +3415,11 @@ public class BrowserController extends JFrame {
                 });
             }
             // HOROS-20240407準拠: [comparativeTable reloadData];
-            // TODO: comparativeTableの更新
+            if (comparativeTable != null && comparativeStudies != null) {
+                SwingUtilities.invokeLater(() -> {
+                    refreshComparativeStudies(comparativeStudies);
+                });
+            }
         }
     }
 
@@ -4095,6 +4712,244 @@ public class BrowserController extends JFrame {
     public void generateReport(Object sender) {
         // TODO: レポート生成実装
     }
+    
+    // ========== Sourcesパネル関連メソッド ==========
+    // HOROS-20240407準拠: BrowserController.m のSourcesパネル関連メソッドを写経
+    
+    /**
+     * ローカルデータベースにリセット
+     * HOROS-20240407準拠: - (void)resetToLocalDatabase (1654行目)
+     */
+    public void resetToLocalDatabase() {
+        // HOROS-20240407準拠: [self setDatabase:[DicomDatabase activeLocalDatabase]];
+        if (database != null) {
+            // TODO: アクティブなローカルデータベースを設定
+            // DicomDatabase localDatabase = DicomDatabase.getActiveLocalDatabase();
+            // setDatabase(localDatabase);
+        }
+    }
+    
+    /**
+     * データベースパスを開く
+     * HOROS-20240407準拠: - (void)openDatabasePath: (NSString*)path (20201行目)
+     * 
+     * @param path データベースのパス
+     */
+    public void openDatabasePath(String path) {
+        // HOROS-20240407準拠: BrowserController.m 20201-20223行目
+        // NSThread* thread = [NSThread currentThread];
+        // [thread setName:NSLocalizedString(@"Opening database...", nil)];
+        // ThreadModalForWindowController* tmc = [thread startModalForWindow:self.window];
+        // 
+        // @try
+        // {
+        //     DicomDatabase* db = [DicomDatabase databaseAtPath:path];
+        //     if( db)
+        //         [self setDatabase:db];
+        //     else
+        //         [NSException raise:NSGenericException format: @"DicomDatabase == nil"];
+        // }
+        // @catch (NSException* e)
+        // {
+        //     N2LogExceptionWithStackTrace(e);
+        //     NSRunAlertPanel(NSLocalizedString(@"Horos Database", nil), NSLocalizedString( @"Horos cannot read/create this file/folder. Permissions error?", nil), nil, nil, nil);
+        //     [self resetToLocalDatabase];
+        // }
+        // 
+        // [tmc invalidate];
+        
+        Thread thread = new Thread(() -> {
+            try {
+                Thread.currentThread().setName("Opening database...");
+                
+                // TODO: DICOM通信が実装されたら、リモートデータベースを開く処理を実装
+                // DicomDatabase db = DicomDatabase.databaseAtPath(path);
+                // if (db != null) {
+                //     SwingUtilities.invokeLater(() -> {
+                //         setDatabase(db);
+                //     });
+                // } else {
+                //     throw new Exception("DicomDatabase == null");
+                // }
+                
+                // 現在はローカルデータベースのみサポート
+                SwingUtilities.invokeLater(() -> {
+                    resetToLocalDatabase();
+                });
+            } catch (Exception e) {
+                // HOROS-20240407準拠: エラーが発生した場合はローカルデータベースにリセット
+                e.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    resetToLocalDatabase();
+                });
+            }
+        });
+        thread.setName("Opening database...");
+        ThreadsManager.defaultManager().addThreadAndStart(thread);
+    }
+    
+    /**
+     * デフォルトデータベースに切り替え（必要に応じて）
+     * HOROS-20240407準拠: - (void) switchToDefaultDBIfNeeded (20193行目) // __deprecated
+     */
+    public void switchToDefaultDBIfNeeded() {
+        // HOROS-20240407準拠: BrowserController.m 20193-20199行目
+        // NSString *defaultPath = [self documentsDirectoryFor: [[NSUserDefaults standardUserDefaults] integerForKey: @"DEFAULT_DATABASELOCATION"] url: [[NSUserDefaults standardUserDefaults] stringForKey: @"DEFAULT_DATABASELOCATIONURL"]];
+        // 
+        // if( [[self documentsDirectory] isEqualToString: defaultPath] == NO)
+        //     [self resetToLocalDatabase];
+        
+        // TODO: デフォルトデータベースパスを取得して比較
+        // String defaultPath = getDocumentsDirectoryFor(...);
+        // String currentPath = getDocumentsDirectory();
+        // if (!defaultPath.equals(currentPath)) {
+        //     resetToLocalDatabase();
+        // }
+    }
+    
+    /**
+     * ソース識別子を取得（行インデックスから）
+     * HOROS-20240407準拠: - (DataNodeIdentifier*)sourceIdentifierAtRow: (int)row
+     * 
+     * @param row 行インデックス
+     * @return ソース識別子（DataNodeIdentifier相当）、存在しない場合はnull
+     */
+    public Object sourceIdentifierAtRow(int row) {
+        // HOROS-20240407準拠: BrowserController.m 2945行目
+        // DataNodeIdentifier* bs = [self sourceIdentifierAtRow: [_sourcesTableView selectedRow]];
+        // 
+        // if( bs)
+        //     description = [description stringByAppendingFormat:NSLocalizedString(@"%@: %@ / ", nil), [_database isLocal] ? NSLocalizedString( @"Local Database", nil) : NSLocalizedString( @"Remote Database", nil), [bs description]];
+        
+        // TODO: DICOM通信が実装されたら、BonjourBrowserからソース識別子を取得
+        // if (bonjourBrowser != null && row > 0) {
+        //     // BonjourBrowserからサービスを取得
+        //     return bonjourBrowser.getServiceAtRow(row - 1);
+        // }
+        
+        // 現在はローカルデータベースのみサポート
+        return null;
+    }
+    
+    /**
+     * サーバーを選択（DICOM送信用）
+     * HOROS-20240407準拠: - (void) selectServer: (NSArray*)objects (18098行目)
+     * 
+     * @param objects 送信するオブジェクトのリスト
+     */
+    public void selectServer(java.util.List<Object> objects) {
+        // HOROS-20240407準拠: BrowserController.m 18098-18102行目
+        // if( [objects count] > 0) [SendController sendFiles: objects];
+        // else NSRunCriticalAlertPanel(NSLocalizedString(@"DICOM Send",nil),NSLocalizedString( @"No files are selected...",nil),NSLocalizedString( @"OK",nil), nil, nil);
+        
+        if (objects != null && !objects.isEmpty()) {
+            // TODO: DICOM通信が実装されたら、SendControllerでファイルを送信
+            // SendController.sendFiles(objects);
+        } else {
+            // HOROS-20240407準拠: ファイルが選択されていない場合はアラートを表示
+            javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "No files are selected...",
+                "DICOM Send",
+                javax.swing.JOptionPane.WARNING_MESSAGE
+            );
+        }
+    }
+    
+    /**
+     * パスをアンマウント
+     * HOROS-20240407準拠: - (void)unmountPath: (NSString*)path (18054行目)
+     * 
+     * @param path アンマウントするパス
+     */
+    public void unmountPath(String path) {
+        // HOROS-20240407準拠: BrowserController.m 18054-18080行目
+        // [_sourcesTableView display];
+        // 
+        // int attempts = 0;
+        // BOOL success = NO;
+        // while( success == NO)
+        // {
+        //     success = [[NSWorkspace sharedWorkspace] unmountAndEjectDeviceAtPath:  path];
+        //     if( success == NO)
+        //     {
+        //         attempts++;
+        //         if( attempts < 5)
+        //         {
+        //             [NSThread sleepForTimeInterval: 1.0];
+        //         }
+        //         else success = YES;
+        //     }
+        // }
+        // 
+        // [_sourcesTableView display];
+        // [_sourcesTableView setNeedsDisplay];
+        // 
+        // if( attempts == 5)
+        // {
+        //     NSRunCriticalAlertPanel(NSLocalizedString(@"Failed", nil), NSLocalizedString(@"Unable to unmount this disk. This disk is probably in used by another application.", nil), NSLocalizedString(@"OK",nil),nil, nil);
+        // }
+        
+        // TODO: Windowsではデバイスのアンマウント処理が異なるため、実装が必要
+        // Javaでは、java.nio.file.FileSystemsを使用してアンマウント処理を実装する必要がある
+        // 現在は未実装
+    }
+    
+    /**
+     * 代替ボタンが押された
+     * HOROS-20240407準拠: - (void)alternateButtonPressed: (NSNotification*)n (18082行目)
+     * 
+     * @param notification 通知オブジェクト
+     */
+    public void alternateButtonPressed(Object notification) {
+        // HOROS-20240407準拠: BrowserController.m 18082-18092行目
+        // int i = [_sourcesTableView selectedRow];
+        // if( i > 0)
+        // {
+        //     NSString *path = [[[bonjourBrowser services] objectAtIndex: i-1] valueForKey:@"Path"];
+        //     
+        //     [self resetToLocalDatabase];
+        //     [self unmountPath: path];
+        // }
+        
+        // TODO: DICOM通信が実装されたら、選択されたソースのパスを取得してアンマウント
+        if (sourcesTableView != null) {
+            int selectedRow = sourcesTableView.getSelectedRow();
+            if (selectedRow > 0) {
+                // TODO: bonjourBrowserからサービスを取得
+                // if (bonjourBrowser != null) {
+                //     Object service = bonjourBrowser.getServiceAtRow(selectedRow - 1);
+                //     if (service != null) {
+                //         String path = getPathFromService(service);
+                //         resetToLocalDatabase();
+                //         unmountPath(path);
+                //     }
+                // }
+            }
+        }
+    }
+    
+    /**
+     * ソース選択が変更された
+     * HOROS-20240407準拠: Sourcesテーブルの選択変更時に呼ばれる
+     */
+    private void sourceSelectionChanged() {
+        // HOROS-20240407準拠: 選択されたソースに基づいてデータベースを切り替え
+        if (sourcesTableView != null) {
+            int selectedRow = sourcesTableView.getSelectedRow();
+            if (selectedRow == 0) {
+                // HOROS-20240407準拠: 最初の行（"Documents DB"）が選択された場合はローカルデータベースにリセット
+                resetToLocalDatabase();
+            } else if (selectedRow > 0) {
+                // TODO: DICOM通信が実装されたら、選択されたリモートデータベースを開く
+                // Object sourceIdentifier = sourceIdentifierAtRow(selectedRow);
+                // if (sourceIdentifier != null) {
+                //     String path = getPathFromSourceIdentifier(sourceIdentifier);
+                //     openDatabasePath(path);
+                // }
+            }
+        }
+    }
 
     /**
      * レポートを削除
@@ -4740,27 +5595,32 @@ public class BrowserController extends JFrame {
         }
         
         // HOROS-20240407準拠: ヘッダーに右クリックリスナーを追加
-        // 既存のリスナーを削除してから追加（重複を防ぐ）
+        // 【重要】列の移動とリサイズを妨害しないよう、右クリックのみを処理する
+        // 左クリックの標準動作（列の移動、リサイズ、ソート）を妨害しない
+        // 【修正】既存のリスナーを削除しない（JTableHeaderの標準リスナーを保持する）
         javax.swing.table.JTableHeader header = databaseOutline.getTableHeader();
         if (header != null) {
-            // 既存のMouseListenerを削除（簡易実装：すべてのリスナーを削除してから追加）
-            java.awt.event.MouseListener[] listeners = header.getMouseListeners();
-            for (java.awt.event.MouseListener listener : listeners) {
-                header.removeMouseListener(listener);
-            }
-            
+            // 【重要】既存のMouseListenerを削除しない
+            // JTableHeaderの標準リスナー（列の移動、リサイズ、ソート）を保持する
+            // 右クリックのみを処理するリスナーを追加（左クリックの標準動作を妨害しない）
             header.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override
                 public void mousePressed(java.awt.event.MouseEvent e) {
-                    if (e.isPopupTrigger()) {
+                    // 右クリックのみを処理（左クリックの標準動作を妨害しない）
+                    if (e.isPopupTrigger() || e.getButton() == java.awt.event.MouseEvent.BUTTON3) {
                         showColumnsMenu(e);
+                        // 右クリックのイベントを消費しない（標準動作を妨害しない）
+                        // e.consume()は呼ばない
                     }
                 }
                 
                 @Override
                 public void mouseReleased(java.awt.event.MouseEvent e) {
-                    if (e.isPopupTrigger()) {
+                    // 右クリックのみを処理（左クリックの標準動作を妨害しない）
+                    if (e.isPopupTrigger() || e.getButton() == java.awt.event.MouseEvent.BUTTON3) {
                         showColumnsMenu(e);
+                        // 右クリックのイベントを消費しない（標準動作を妨害しない）
+                        // e.consume()は呼ばない
                     }
                 }
             });

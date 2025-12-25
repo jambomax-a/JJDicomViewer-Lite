@@ -4,8 +4,6 @@ import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableColumn;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
 import java.awt.event.MouseEvent;
 
 /**
@@ -45,14 +43,8 @@ public class AlbumTableView extends JTable {
         setModel(model);
         
         // HOROS-20240407準拠: 選択変更リスナー
-        getSelectionModel().addListSelectionListener(new ListSelectionListener() {
-            @Override
-            public void valueChanged(ListSelectionEvent e) {
-                if (!e.getValueIsAdjusting()) {
-                    albumTableSelectionChanged();
-                }
-            }
-        });
+        // 注意: isUpdatingAlbumTableフラグを考慮するため、BrowserControllerで処理
+        // ここではリスナーを追加しない（BrowserControllerで追加される）
         
         // HOROS-20240407準拠: コンテキストメニューを設定
         setComponentPopupMenu(createContextMenu());
@@ -92,17 +84,6 @@ public class AlbumTableView extends JTable {
         menu.add(removeItem);
         
         return menu;
-    }
-    
-    /**
-     * アルバム選択が変更された
-     * HOROS-20240407準拠
-     */
-    private void albumTableSelectionChanged() {
-        if (browserController != null) {
-            // HOROS-20240407準拠: outlineViewRefreshを呼び出す
-            browserController.outlineViewRefresh();
-        }
     }
     
     /**
