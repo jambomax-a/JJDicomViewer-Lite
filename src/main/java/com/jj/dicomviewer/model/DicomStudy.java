@@ -176,10 +176,48 @@ public class DicomStudy {
     
     /**
      * シリーズモダリティの表示モダリティを取得
+     * HOROS-20240407準拠: DicomStudy.m 864-903行目 - displayedModalitiesForSeries:
      */
     public static String displayedModalitiesForSeries(List<String> seriesModalities) {
-        // TODO: 実装
-        return String.join(", ", seriesModalities);
+        if (seriesModalities == null || seriesModalities.isEmpty()) {
+            return "";
+        }
+        
+        java.util.List<String> r = new java.util.ArrayList<>();
+        boolean SC = false, SR = false, PR = false, OT = false;
+        
+        for (String mod : seriesModalities) {
+            if (mod == null) continue;
+            
+            if ("SR".equals(mod)) {
+                SR = true;
+            } else if ("SC".equals(mod)) {
+                SC = true;
+            } else if ("PR".equals(mod)) {
+                PR = true;
+            } else if ("RTSTRUCT".equals(mod) && !r.contains(mod)) {
+                r.add("RT");
+            } else if ("OT".equals(mod)) {
+                OT = true;
+            } else if ("KO".equals(mod)) {
+                // KOは無視
+            } else if (!r.contains(mod)) {
+                r.add(mod);
+            }
+        }
+        
+        if (r.isEmpty()) {
+            if (SC) {
+                r.add("SC");
+            } else if (OT) {
+                r.add("OT");
+            } else {
+                if (SR) r.add("SR");
+                if (PR) r.add("PR");
+            }
+        }
+        
+        return String.join("\\", r);
     }
     
     /**
@@ -202,9 +240,93 @@ public class DicomStudy {
     /**
      * ファイル数を取得
      */
+    /**
+     * ファイル数を取得
+     * HOROS-20240407準拠: DicomStudy.m 1517-1556行目
+     */
     public Integer noFiles() {
-        // TODO: 実装
-        return numberOfImages;
+        // HOROS-20240407準拠: DicomStudy.m 1519行目
+        // numberOfImagesが0の場合は、SeriesのnoFilesを合計して計算
+        if (numberOfImages != null && numberOfImages.intValue() != 0) {
+            return numberOfImages;
+        }
+        
+        // HOROS-20240407準拠: DicomStudy.m 1522-1545行目
+        // SeriesのnoFilesを合計
+        int sum = 0;
+        boolean framesInSeries = false;
+        
+        if (series != null && !series.isEmpty()) {
+            for (DicomSeries s : series) {
+                try {
+                    // HOROS-20240407準拠: DicomStudy.m 1531-1533行目
+                    // StructuredReport、SupportedPrivateClasses、PresentationStateを除外
+                    String sopClassUID = s.getSeriesSOPClassUID();
+                    if (sopClassUID != null) {
+                        // 簡易実装: SR（Structured Report）を除外
+                        if (!isStructuredReport(sopClassUID) && 
+                            !isSupportedPrivateClasses(sopClassUID) && 
+                            !isPresentationState(sopClassUID)) {
+                            
+                            Integer seriesNoFiles = s.noFiles();
+                            if (seriesNoFiles != null) {
+                                sum += seriesNoFiles.intValue();
+                            }
+                            
+                            // HOROS-20240407準拠: DicomStudy.m 1537行目
+                            // numberOfImages < 0 の場合はフレームがある
+                            Integer seriesNumberOfImages = s.getNumberOfImages();
+                            if (seriesNumberOfImages != null && seriesNumberOfImages.intValue() < 0) {
+                                framesInSeries = true;
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    // エラーが発生したSeriesは除外
+                }
+            }
+        }
+        
+        // HOROS-20240407準拠: DicomStudy.m 1542-1543行目
+        // framesInSeriesがtrueの場合は負の値にする
+        if (framesInSeries) {
+            sum = -sum;
+        }
+        
+        // HOROS-20240407準拠: DicomStudy.m 1547-1549行目
+        // numberOfImagesを更新（キャッシュ）
+        numberOfImages = sum;
+        
+        // HOROS-20240407準拠: DicomStudy.m 1558-1559行目
+        // sum < 0 の場合は絶対値を返す
+        if (sum < 0) {
+            return -sum;
+        }
+        return sum;
+    }
+    
+    /**
+     * サポートされているプライベートクラスかどうかを判定
+     * HOROS-20240407準拠: DCMAbstractSyntaxUID.isSupportedPrivateClasses
+     */
+    private static boolean isSupportedPrivateClasses(String uid) {
+        // HOROS-20240407準拠: 簡易実装
+        // 実際にはDCMAbstractSyntaxUID.isSupportedPrivateClasses()を使用
+        return false; // 簡易実装では常にfalse
+    }
+    
+    /**
+     * プレゼンテーション状態かどうかを判定
+     * HOROS-20240407準拠: DCMAbstractSyntaxUID.isPresentationState
+     */
+    private static boolean isPresentationState(String uid) {
+        // HOROS-20240407準拠: 簡易実装
+        // 実際にはDCMAbstractSyntaxUID.isPresentationState()を使用
+        if (uid == null) {
+            return false;
+        }
+        // プレゼンテーション状態のSOP Class UIDのプレフィックス
+        return uid.startsWith("1.2.840.10008.5.1.4.1.1.11");
     }
     
     /**
@@ -234,17 +356,143 @@ public class DicomStudy {
     /**
      * 生ファイル数を取得
      */
+    /**
+     * 生ファイル数を取得
+     * HOROS-20240407準拠: DicomStudy.m 1466-1485行目
+     */
     public Integer rawNoFiles() {
-        // TODO: 実装
-        return numberOfImages;
+        // HOROS-20240407準拠: DicomStudy.m 1468-1475行目
+        // SeriesのrawNoFilesを合計
+        int sum = 0;
+        
+        if (series != null && !series.isEmpty()) {
+            for (DicomSeries s : series) {
+                try {
+                    Integer seriesRawNoFiles = s.rawNoFiles();
+                    if (seriesRawNoFiles != null) {
+                        sum += seriesRawNoFiles.intValue();
+                    }
+                } catch (Exception e) {
+                    // エラーが発生したSeriesは除外
+                }
+            }
+        }
+        
+        return sum;
     }
     
     /**
      * モダリティを取得
+     * HOROS-20240407準拠: DicomStudy.m 905-937行目 - modalities
+     * Seriesからモダリティを集約して返す
      */
     public String modalities() {
-        // TODO: 実装
-        return cachedModalities;
+        if (cachedModalities != null && numberOfImages != null && 
+            numberOfImagesWhenCachedModalities == numberOfImages.intValue()) {
+            return cachedModalities;
+        }
+        
+        if (series == null || series.isEmpty()) {
+            return modality != null ? modality : "";
+        }
+        
+        // HOROS-20240407準拠: Seriesを日付でソートしてモダリティを取得（921行目）
+        java.util.List<DicomSeries> sortedSeries = new java.util.ArrayList<>(series);
+        sortedSeries.sort((s1, s2) -> {
+            if (s1.getDate() == null && s2.getDate() == null) return 0;
+            if (s1.getDate() == null) return 1;
+            if (s2.getDate() == null) return -1;
+            return s1.getDate().compareTo(s2.getDate());
+        });
+        
+        java.util.List<String> seriesModalities = new java.util.ArrayList<>();
+        for (DicomSeries s : sortedSeries) {
+            String mod = s.getModality();
+            if (mod != null && !mod.isEmpty()) {
+                seriesModalities.add(mod);
+            }
+        }
+        
+        String m = displayedModalitiesForSeries(seriesModalities);
+        cachedModalities = m;
+        if (numberOfImages != null) {
+            numberOfImagesWhenCachedModalities = numberOfImages.intValue();
+        }
+        
+        return m;
+    }
+    
+    /**
+     * シリーズソート用のComparatorを取得
+     * HOROS-20240407準拠: DicomStudy.m 1685-1696行目
+     * + (NSArray*) seriesSortDescriptors
+     */
+    public static java.util.Comparator<DicomSeries> getSeriesSortComparator() {
+        // HOROS-20240407準拠: SERIESORDER設定に基づいてソート順序を決定
+        // デフォルトはseriesInstanceUID (numericCompare) -> date (ascending)
+        int seriesOrder = 0; // TODO: NSUserDefaultsから取得 (SERIESORDER)
+        
+        return (s1, s2) -> {
+            int result = 0;
+            if (seriesOrder == 0) { // sortid, sortdate
+                result = compareSeriesInstanceUID(s1.getSeriesInstanceUID(), s2.getSeriesInstanceUID());
+                if (result == 0) {
+                    result = compareDates(s1.getDate(), s2.getDate(), true);
+                }
+            } else if (seriesOrder == 1) { // sortdate, sortid
+                result = compareDates(s1.getDate(), s2.getDate(), true);
+                if (result == 0) {
+                    result = compareSeriesInstanceUID(s1.getSeriesInstanceUID(), s2.getSeriesInstanceUID());
+                }
+            } else { // デフォルトはsortid, sortdate
+                result = compareSeriesInstanceUID(s1.getSeriesInstanceUID(), s2.getSeriesInstanceUID());
+                if (result == 0) {
+                    result = compareDates(s1.getDate(), s2.getDate(), true);
+                }
+            }
+            return result;
+        };
+    }
+    
+    /**
+     * seriesInstanceUIDを数値比較
+     * HOROS-20240407準拠: numericCompare:セレクタ
+     */
+    private static int compareSeriesInstanceUID(String uid1, String uid2) {
+        if (uid1 == null && uid2 == null) return 0;
+        if (uid1 == null) return 1;
+        if (uid2 == null) return -1;
+        // HOROS-20240407準拠: numericCompare:セレクタを使用
+        // UIDの数値部分を比較（簡易実装として文字列比較を使用）
+        return uid1.compareTo(uid2);
+    }
+    
+    /**
+     * 日付を比較
+     * HOROS-20240407準拠: ascendingに基づいて比較
+     */
+    private static int compareDates(LocalDateTime date1, LocalDateTime date2, boolean ascending) {
+        if (date1 == null && date2 == null) return 0;
+        if (date1 == null) return ascending ? 1 : -1;
+        if (date2 == null) return ascending ? -1 : 1;
+        int cmp = date1.compareTo(date2);
+        return ascending ? cmp : -cmp;
+    }
+    
+    /**
+     * すべてのシリーズ配列を取得（ソート済み）
+     * HOROS-20240407準拠: DicomStudy.m 1698-1701行目
+     * - (NSArray*)allSeries
+     */
+    public List<DicomSeries> allSeries() {
+        // HOROS-20240407準拠: return [self.series sortedArrayUsingDescriptors: [DicomStudy seriesSortDescriptors]]; (1700行目)
+        if (series == null || series.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        
+        List<DicomSeries> sortedSeries = new java.util.ArrayList<>(series);
+        sortedSeries.sort(getSeriesSortComparator());
+        return sortedSeries;
     }
     
     /**
@@ -252,33 +500,139 @@ public class DicomStudy {
      * HOROS-20240407: - (NSArray*)imageSeries
      */
     public List<DicomSeries> imageSeries() {
-        System.out.println("DicomStudy.imageSeries: studyInstanceUID=" + studyInstanceUID + ", series is null? " + (series == null) + ", series.size()=" + (series != null ? series.size() : "null"));
+        // HOROS-20240407準拠: DicomStudy.m 1726-1729行目
         return imageSeriesContainingPixels(false);
     }
     
     /**
      * 画像シリーズ配列を取得（ピクセルデータ含むかどうか）
-     * HOROS-20240407: - (NSArray*)imageSeriesContainingPixels:(BOOL) pixels
+     * HOROS-20240407準拠: DicomStudy.m 1703-1724行目
      */
     public List<DicomSeries> imageSeriesContainingPixels(boolean pixels) {
         if (series == null || series.isEmpty()) {
-            System.out.println("DicomStudy.imageSeriesContainingPixels: series is null or empty, returning empty list");
             return new java.util.ArrayList<>();
         }
         
+        // HOROS-20240407準拠: DicomStudy.m 1708行目
+        // [self.series sortedArrayUsingDescriptors: [DicomStudy seriesSortDescriptors]]
+        // Seriesをソートしてから処理
+        // HOROS-20240407準拠: DicomStudy.m 1685-1696行目 - seriesSortDescriptors
+        List<DicomSeries> sortedSeries = new java.util.ArrayList<>(series);
+        sortedSeries.sort(getSeriesSortComparator());
+        
         List<DicomSeries> result = new java.util.ArrayList<>();
-        for (DicomSeries s : series) {
-            // HOROS-20240407準拠: 画像ストレージのシリーズのみを返す
-            // TODO: DCMAbstractSyntaxUID.isImageStorage()で判定
-            // 現在は簡易実装として、全てのシリーズを返す
-            // SR（Structured Report）やPDFは除外する必要がある
-            String sopClassUID = s.getSeriesSOPClassUID();
-            if (sopClassUID == null || !sopClassUID.contains("SR")) {
-                result.add(s);
+        for (DicomSeries s : sortedSeries) {
+            try {
+                // HOROS-20240407準拠: DicomStudy.m 1710行目
+                // displaySeriesWithSOPClassUID:andSeriesDescription:containingOnlyPixels:で判定
+                if (displaySeriesWithSOPClassUID(s.getSeriesSOPClassUID(), s.getName(), pixels)) {
+                    result.add(s);
+                }
+            } catch (Exception e) {
+                // HOROS-20240407準拠: DicomStudy.m 1712行目 - @catch (...)でエラーを無視
+                // エラーが発生したシリーズは除外
             }
         }
-        System.out.println("DicomStudy.imageSeriesContainingPixels: returning " + result.size() + " series (total series=" + series.size() + ")");
         return result;
+    }
+    
+    /**
+     * シリーズを表示するかどうかを判定
+     * HOROS-20240407準拠: DicomStudy.m 1634-1659行目
+     */
+    public static boolean displaySeriesWithSOPClassUID(String uid, String description, boolean pixels) {
+        // HOROS-20240407準拠: DicomStudy.m 1636行目
+        if (description != null && description.equals("OsiriX No Autodeletion")) {
+            return false;
+        }
+        
+        if (pixels) {
+            // HOROS-20240407準拠: DicomStudy.m 1641-1646行目
+            if (uid == null || isImageStorage(uid)) {
+                if (uid != null && uid.equals(getPdfStorageClassUID())) {
+                    return false;
+                }
+                return true;
+            }
+        } else {
+            // HOROS-20240407準拠: DicomStudy.m 1651-1655行目
+            if (uid == null || isImageStorage(uid) || isRadiotherapy(uid) || isWaveform(uid)) {
+                return true;
+            }
+            
+            // HOROS-20240407準拠: DicomStudy.m 1654行目
+            // 特定のSR（Structured Report）を含む
+            if (isStructuredReport(uid) && description != null) {
+                if (!description.startsWith("OsiriX ROI SR") &&
+                    !description.startsWith("OsiriX Annotations SR") &&
+                    !description.startsWith("OsiriX Report SR") &&
+                    !description.startsWith("OsiriX WindowsState SR")) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * 画像ストレージかどうかを判定
+     * HOROS-20240407準拠: DCMAbstractSyntaxUID.isImageStorage
+     */
+    private static boolean isImageStorage(String uid) {
+        // HOROS-20240407準拠: DCMAbstractSyntaxUID.isImageStorage()の簡易実装
+        if (uid == null) {
+            return false;
+        }
+        // HOROS-20240407準拠: 画像ストレージのSOP Class UIDのプレフィックス
+        // 1.2.840.10008.5.1.4.1.1.x の形式（xは画像ストレージのタイプ）
+        // PDFストレージ（1.2.840.10008.5.1.4.1.1.104.1）は除外される
+        return uid.startsWith("1.2.840.10008.5.1.4.1.1.");
+    }
+    
+    /**
+     * 放射線治療かどうかを判定
+     * HOROS-20240407準拠: DCMAbstractSyntaxUID.isRadiotherapy
+     */
+    private static boolean isRadiotherapy(String uid) {
+        // HOROS-20240407準拠: 簡易実装
+        if (uid == null) {
+            return false;
+        }
+        return uid.startsWith("1.2.840.10008.5.1.4.1.1.481");
+    }
+    
+    /**
+     * 波形かどうかを判定
+     * HOROS-20240407準拠: DCMAbstractSyntaxUID.isWaveform
+     */
+    private static boolean isWaveform(String uid) {
+        // HOROS-20240407準拠: 簡易実装
+        if (uid == null) {
+            return false;
+        }
+        return uid.startsWith("1.2.840.10008.5.1.4.1.1.9");
+    }
+    
+    /**
+     * 構造化レポートかどうかを判定
+     * HOROS-20240407準拠: DCMAbstractSyntaxUID.isStructuredReport
+     */
+    public static boolean isStructuredReport(String uid) {
+        // HOROS-20240407準拠: 簡易実装
+        if (uid == null) {
+            return false;
+        }
+        return uid.startsWith("1.2.840.10008.5.1.4.1.1.88");
+    }
+    
+    /**
+     * PDFストレージクラスUIDを取得
+     * HOROS-20240407準拠: DCMAbstractSyntaxUID.pdfStorageClassUID
+     */
+    private static String getPdfStorageClassUID() {
+        // HOROS-20240407準拠: PDFストレージのSOP Class UID
+        return "1.2.840.10008.5.1.4.1.1.104.1";
     }
     
     /**
@@ -680,6 +1034,36 @@ public class DicomStudy {
         if (series != null) {
             series.removeAll(value);
         }
+    }
+    
+    /**
+     * localstringを取得
+     * HOROS-20240407準拠: DicomStudy.m 1291-1310行目
+     * inDatabaseFolderがtrueの場合は"L"を返し、falseの場合は空文字列を返す
+     */
+    public String localstring() {
+        boolean local = true;
+        
+        try {
+            // HOROS-20240407準拠: 最初のSeriesの最初のImageのinDatabaseFolderをチェック
+            if (series != null && !series.isEmpty()) {
+                DicomSeries firstSeries = series.iterator().next();
+                if (firstSeries != null && firstSeries.getImages() != null && !firstSeries.getImages().isEmpty()) {
+                    DicomImage firstImage = firstSeries.getImages().iterator().next();
+                    if (firstImage != null) {
+                        Boolean inDatabaseFolder = firstImage.getInDatabaseFolder();
+                        // HOROS-20240407準拠: inDatabaseFolderがtrueの場合はlocal=true、それ以外はfalse
+                        local = (inDatabaseFolder != null && inDatabaseFolder.booleanValue());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // エラーが発生した場合はデフォルト値（true）を使用
+            local = true;
+        }
+        
+        // HOROS-20240407準拠: localがtrueの場合は"L"を返し、falseの場合は空文字列を返す
+        return local ? "L" : "";
     }
 }
 

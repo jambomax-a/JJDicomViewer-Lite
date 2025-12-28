@@ -59,6 +59,23 @@ public class DatabaseOutlineView extends JXTreeTable {
     
     
     /**
+     * statesArrayを取得
+     * HOROS-20240407準拠: BrowserController.m 14293行目
+     */
+    private static String[] getStatesArray() {
+        // HOROS-20240407準拠: BrowserController.m 14293行目
+        // statesArray = [@"empty", @"unread", @"reviewed", @"dictated", @"validated"]
+        return new String[] {
+            "",           // インデックス0は空（stateText == 0の場合は空文字列）
+            "empty",      // インデックス1
+            "unread",     // インデックス2
+            "reviewed",   // インデックス3
+            "dictated",   // インデックス4
+            "validated"   // インデックス5
+        };
+    }
+    
+    /**
      * prepareRendererをオーバーライド（UIDハイライトを処理）
      * JXTreeTableでは、最初の列（階層表示用）にTreeTableCellRendererが使用されるため、
      * prepareRendererで背景色を設定する
@@ -184,33 +201,41 @@ public class DatabaseOutlineView extends JXTreeTable {
     public static final String COL_INSTITUTION_NAME = "institutionName";
     public static final String COL_ALBUMS_NAMES = "albumsNames";
     public static final String COL_DATE_OF_BIRTH = "dateOfBirth";
+    public static final String COL_LOCALSTRING = "localstring";
+    public static final String COL_COMMENT2 = "comment2";
+    public static final String COL_COMMENT3 = "comment3";
+    public static final String COL_COMMENT4 = "comment4";
     
-    // 列タイトル（HOROS-20240407 MainMenu.xib準拠）
+    // 列タイトル（HOROS-20240407 MainMenu.xib準拠: 4300-4644行目）
     private static final String[] COLUMN_NAMES = {
-        "Patient Name",       // name
-        "Report",             // reportURL
-        "Lock",               // lockedStudy
-        "Patient ID",         // patientID
-        "Age",                // yearOld
-        "Accession Number",   // accessionNumber
-        "Study Description",  // studyName
-        "Modality",           // modality
-        "# Images",           // id
-        "Comments",           // comment
-        "State",              // stateText
-        "Date Acquired",      // date
-        "# Files",            // noFiles
-        "# Series",           // noSeries
-        "Date Added",         // dateAdded
-        "Date Opened",        // dateOpened
-        "Referring Physician", // referringPhysician
-        "Performing Physician", // performingPhysician
-        "Institution",        // institutionName
-        "Albums",             // albumsNames
-        "Date of Birth"       // dateOfBirth
+        "Patient name",       // name (4300行目)
+        "Report",             // reportURL (4314行目)
+        "Lock",               // lockedStudy (4328行目)
+        "Patient ID",         // patientID (4341行目)
+        "Age",                // yearOld (4355行目)
+        "Accession Number",   // accessionNumber (4369行目)
+        "Study Description",  // studyName (4383行目)
+        "Modality",           // modality (4397行目)
+        "ID",                 // id (4411行目)
+        "Comments",           // comment (4425行目)
+        "Status",             // stateText (4439行目)
+        "Date Acquired",      // date (4453行目)
+        "# im",               // noFiles (4467行目)
+        "# series",           // noSeries (4480行目)
+        "Date Added",         // dateAdded (4493行目)
+        "Date Opened",        // dateOpened (4507行目)
+        "Referring Physician", // referringPhysician (4521行目)
+        "Performing Physician", // performingPhysician (4535行目)
+        "Institution",        // institutionName (4549行目)
+        "Albums",             // albumsNames (4563行目)
+        "Date of Birth",      // dateOfBirth (4577行目)
+        "∆",                  // localstring (4591行目)
+        "Comments 2",         // comment2 (4603行目)
+        "Comments 3",         // comment3 (4617行目)
+        "Comments 4"          // comment4 (4631行目)
     };
     
-    // 列識別子（HOROS-20240407準拠）
+    // 列識別子（HOROS-20240407 MainMenu.xib準拠: 4300-4644行目）
     private static final String[] COLUMN_IDENTIFIERS = {
         COL_NAME,
         COL_REPORT_URL,
@@ -232,82 +257,98 @@ public class DatabaseOutlineView extends JXTreeTable {
         COL_PERFORMING_PHYSICIAN,
         COL_INSTITUTION_NAME,
         COL_ALBUMS_NAMES,
-        COL_DATE_OF_BIRTH
+        COL_DATE_OF_BIRTH,
+        COL_LOCALSTRING,
+        COL_COMMENT2,
+        COL_COMMENT3,
+        COL_COMMENT4
     };
     
-    // 列幅（HOROS-20240407 MainMenu.xib準拠）
+    // 列幅（HOROS-20240407 MainMenu.xib準拠: 4300-4644行目）
     private static final int[] COLUMN_WIDTHS = {
-        222,  // name
-        100,  // reportURL
-        50,   // lockedStudy
-        100,  // patientID
-        70,   // yearOld
-        119,  // accessionNumber
-        155,  // studyName
-        65,   // modality
-        60,   // id
-        100,  // comment
-        100,  // stateText
-        130,  // date
-        50,   // noFiles
-        50,   // noSeries
-        130,  // dateAdded
-        130,  // dateOpened
-        120,  // referringPhysician
-        120,  // performingPhysician
-        120,  // institutionName
-        120,  // albumsNames
-        90    // dateOfBirth
+        222,  // name (4300行目: width="222")
+        100,  // reportURL (4314行目: width="100")
+        50,   // lockedStudy (4328行目: width="50")
+        100,  // patientID (4341行目: width="100")
+        70,   // yearOld (4355行目: width="70")
+        119,  // accessionNumber (4369行目: width="119")
+        155,  // studyName (4383行目: width="155")
+        65,   // modality (4397行目: width="65")
+        60,   // id (4411行目: width="60")
+        100,  // comment (4425行目: width="100")
+        100,  // stateText (4439行目: width="100")
+        130,  // date (4453行目: width="130")
+        50,   // noFiles (4467行目: width="50")
+        50,   // noSeries (4480行目: width="50")
+        130,  // dateAdded (4493行目: width="130")
+        130,  // dateOpened (4507行目: width="130")
+        120,  // referringPhysician (4521行目: width="120")
+        120,  // performingPhysician (4535行目: width="120")
+        120,  // institutionName (4549行目: width="120")
+        120,  // albumsNames (4563行目: width="120")
+        90,   // dateOfBirth (4577行目: width="90")
+        16,   // localstring (4591行目: width="16")
+        100,  // comment2 (4603行目: width="100")
+        100,  // comment3 (4617行目: width="100")
+        100   // comment4 (4631行目: width="100")
     };
     
-    // 列最小幅（HOROS-20240407 MainMenu.xib準拠）
+    // 列最小幅（HOROS-20240407 MainMenu.xib準拠: 4300-4644行目）
     private static final int[] COLUMN_MIN_WIDTHS = {
-        50,   // name
-        55,   // reportURL
-        45,   // lockedStudy
-        50,   // patientID
-        50,   // yearOld
-        50,   // accessionNumber
-        50,   // studyName
-        65,   // modality
-        60,   // id
-        100,  // comment
-        100,  // stateText
-        130,  // date
-        50,   // noFiles
-        50,   // noSeries
-        130,  // dateAdded
-        130,  // dateOpened
-        40,   // referringPhysician
-        40,   // performingPhysician
-        40,   // institutionName
-        40,   // albumsNames
-        90    // dateOfBirth
+        50,   // name (4300行目: minWidth="50")
+        55,   // reportURL (4314行目: minWidth="55")
+        45,   // lockedStudy (4328行目: minWidth="45")
+        50,   // patientID (4341行目: minWidth="50")
+        50,   // yearOld (4355行目: minWidth="50")
+        50,   // accessionNumber (4369行目: minWidth="50")
+        50,   // studyName (4383行目: minWidth="50")
+        65,   // modality (4397行目: minWidth="65")
+        60,   // id (4411行目: minWidth="60")
+        100,  // comment (4425行目: minWidth="100")
+        100,  // stateText (4439行目: minWidth="100")
+        130,  // date (4453行目: minWidth="130")
+        50,   // noFiles (4467行目: minWidth="50")
+        50,   // noSeries (4480行目: minWidth="50")
+        130,  // dateAdded (4493行目: minWidth="130")
+        130,  // dateOpened (4507行目: minWidth="130")
+        40,   // referringPhysician (4521行目: minWidth="40")
+        40,   // performingPhysician (4535行目: minWidth="40")
+        40,   // institutionName (4549行目: minWidth="40")
+        40,   // albumsNames (4563行目: minWidth="40")
+        90,   // dateOfBirth (4577行目: minWidth="90")
+        15,   // localstring (4591行目: minWidth="15.703120231628418" -> 15)
+        100,  // comment2 (4603行目: minWidth="100")
+        100,  // comment3 (4617行目: minWidth="100")
+        100   // comment4 (4631行目: minWidth="100")
     };
     
-    // 列最大幅（HOROS-20240407 MainMenu.xib準拠）
+    // 列最大幅（HOROS-20240407 MainMenu.xib準拠: 4300-4644行目）
     private static final int[] COLUMN_MAX_WIDTHS = {
-        400,  // name
-        120,  // reportURL
-        55,   // lockedStudy
-        200,  // patientID
-        100,  // yearOld
-        200,  // accessionNumber
-        400,  // studyName
-        100,  // modality
-        100,  // id
-        300,  // comment
-        100,  // stateText
-        180,  // date
-        50,   // noFiles
-        50,   // noSeries
-        180,  // dateAdded
-        180,  // dateOpened
-        400,  // referringPhysician
-        400,  // performingPhysician
-        400,  // institutionName
-        200,  // albumsNames
-        140   // dateOfBirth
+        400,  // name (4300行目: maxWidth="400")
+        120,  // reportURL (4314行目: maxWidth="120")
+        55,   // lockedStudy (4328行目: maxWidth="55")
+        200,  // patientID (4341行目: maxWidth="200")
+        100,  // yearOld (4355行目: maxWidth="100")
+        200,  // accessionNumber (4369行目: maxWidth="200")
+        400,  // studyName (4383行目: maxWidth="400")
+        100,  // modality (4397行目: maxWidth="100")
+        100,  // id (4411行目: maxWidth="100")
+        300,  // comment (4425行目: maxWidth="300")
+        100,  // stateText (4439行目: maxWidth="100")
+        180,  // date (4453行目: maxWidth="180")
+        50,   // noFiles (4467行目: maxWidth="50")
+        50,   // noSeries (4480行目: maxWidth="50")
+        180,  // dateAdded (4493行目: maxWidth="180")
+        180,  // dateOpened (4507行目: maxWidth="180")
+        400,  // referringPhysician (4521行目: maxWidth="400")
+        400,  // performingPhysician (4535行目: maxWidth="400")
+        400,  // institutionName (4549行目: maxWidth="400")
+        200,  // albumsNames (4563行目: maxWidth="200")
+        140,  // dateOfBirth (4577行目: maxWidth="140")
+        16,   // localstring (4591行目: maxWidth="16")
+        300,  // comment2 (4603行目: maxWidth="300")
+        300,  // comment3 (4617行目: maxWidth="300")
+        300   // comment4 (4631行目: maxWidth="300")
     };
     
     /**
@@ -349,6 +390,9 @@ public class DatabaseOutlineView extends JXTreeTable {
         
         // ダブルクリックリスナーを追加
         addDoubleClickListener();
+        
+        // HOROS-20240407準拠: stateText列のクリックイベントを追加
+        addStateTextClickListener();
         
         // HOROS-20240407準拠: name列（識別子が"name"の列）のみでUIDハイライトを適用
         // prepareRendererで処理するため、TreeCellRendererのカスタマイズは不要
@@ -702,6 +746,72 @@ public class DatabaseOutlineView extends JXTreeTable {
                 }
             }
         });
+    }
+    
+    /**
+     * stateText列のクリックイベントを追加
+     * HOROS-20240407準拠: NSPopUpButtonCellの動作を再現
+     */
+    private void addStateTextClickListener() {
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // HOROS-20240407準拠: 列ヘッダーのクリックを除外
+                if (e.getSource() instanceof javax.swing.table.JTableHeader) {
+                    return;
+                }
+                
+                // HOROS-20240407準拠: stateText列のクリックを処理
+                int row = rowAtPoint(e.getPoint());
+                int column = columnAtPoint(e.getPoint());
+                
+                if (row >= 0 && column >= 0) {
+                    javax.swing.table.TableColumn tableColumn = getColumnModel().getColumn(column);
+                    Object identifier = tableColumn != null ? tableColumn.getIdentifier() : null;
+                    
+                    if (identifier != null && COL_STATE_TEXT.equals(identifier.toString())) {
+                        // HOROS-20240407準拠: stateText列がクリックされた場合、ポップアップメニューを表示
+                        TreePath path = getPathForRow(row);
+                        if (path != null) {
+                            Object item = path.getLastPathComponent();
+                            if (item instanceof DicomStudy) {
+                                showStateTextPopupMenu((DicomStudy) item, e.getComponent(), e.getX(), e.getY());
+                            } else if (item instanceof DicomSeries) {
+                                DicomSeries series = (DicomSeries) item;
+                                DicomStudy study = series.getStudy();
+                                if (study != null) {
+                                    showStateTextPopupMenu(study, e.getComponent(), e.getX(), e.getY());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    /**
+     * stateText列のポップアップメニューを表示
+     * HOROS-20240407準拠: NSPopUpButtonCellの動作を再現
+     */
+    private void showStateTextPopupMenu(DicomStudy study, java.awt.Component component, int x, int y) {
+        String[] statesArray = getStatesArray();
+        javax.swing.JPopupMenu popup = new javax.swing.JPopupMenu();
+        
+        for (int i = 1; i < statesArray.length; i++) {
+            String state = statesArray[i];
+            javax.swing.JMenuItem menuItem = new javax.swing.JMenuItem(state);
+            final int stateIndex = i;
+            menuItem.addActionListener(evt -> {
+                // HOROS-20240407準拠: stateTextを更新
+                study.setStateText(stateIndex);
+                // テーブルを再描画
+                repaint();
+            });
+            popup.add(menuItem);
+        }
+        
+        popup.show(component, x, y);
     }
     
     /**
@@ -1455,6 +1565,42 @@ public class DatabaseOutlineView extends JXTreeTable {
     }
     
     /**
+     * 指定されたスタディを選択
+     * HOROS-20240407準拠: - (BOOL) selectThisStudy: (NSManagedObject*)study (BrowserController.m 2034行目)
+     */
+    public boolean selectStudy(com.jj.dicomviewer.model.DicomStudy study) {
+        if (study == null) {
+            return false;
+        }
+        
+        try {
+            // HOROS-20240407準拠: outlineViewArrayから同じstudyInstanceUIDを持つスタディを検索
+            List<Object> outlineArray = browserController.getOutlineViewArray();
+            if (outlineArray != null) {
+                for (int i = 0; i < outlineArray.size(); i++) {
+                    Object item = outlineArray.get(i);
+                    if (item instanceof com.jj.dicomviewer.model.DicomStudy) {
+                        com.jj.dicomviewer.model.DicomStudy s = (com.jj.dicomviewer.model.DicomStudy) item;
+                        if (study.getStudyInstanceUID() != null && 
+                            study.getStudyInstanceUID().equals(s.getStudyInstanceUID())) {
+                            // HOROS-20240407準拠: スタディを選択
+                            // JXTreeTableでは、TreePathを作成して選択する
+                            TreePath path = new TreePath(new Object[] { treeTableModel.getRoot(), s });
+                            getTreeSelectionModel().setSelectionPath(path);
+                            scrollPathToVisible(path);
+                            return true;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // エラーは無視
+        }
+        
+        return false;
+    }
+    
+    /**
      * TreeTableModel実装
      * HOROS-20240407準拠: NSOutlineViewDataSource/NSOutlineViewDelegate
      */
@@ -1605,19 +1751,37 @@ public class DatabaseOutlineView extends JXTreeTable {
         private String getStudyValue(DicomStudy study, String columnId) {
             switch (columnId) {
                 case COL_NAME:
+                    // HOROS-20240407準拠: BrowserController.m 6477-6493行目
+                    // HIDEPATIENTNAME設定を確認
+                    // TODO: NSUserDefaultsから取得（現在はデフォルトfalseと仮定）
+                    boolean hidePatientName = false;
+                    if (hidePatientName) {
+                        return "Name hidden"; // HOROS-20240407準拠: NSLocalizedString(@"Name hidden", nil)
+                    }
                     String name = study.getName();
                     if (name == null || name.isEmpty()) {
                         name = study.getPatientID();
                     }
-                    return name != null ? name : "Unknown";
+                    return name != null ? name : "";
                     
                 case COL_REPORT_URL:
-                    // TODO: レポートURL
+                    // HOROS-20240407準拠: BrowserController.m 6440-6457行目
+                    // Studyの場合、reportImageのdateを返す
+                    if (study.getReportURL() != null && !study.getReportURL().isEmpty()) {
+                        // HOROS-20240407準拠: DicomStudy *study = (DicomStudy*) item;
+                        // DicomImage *report = [study reportImage];
+                        // if( [report valueForKey: @"date"]) return [report valueForKey: @"date"];
+                        // TODO: reportImageメソッドの実装が必要
+                        // 現在はreportURLが存在する場合のみ空文字列を返す（dateは後で実装）
+                        return ""; // TODO: reportImageのdateを返す
+                    }
                     return "";
                     
                 case COL_LOCKED_STUDY:
-                    // TODO: ロック状態
-                    return "";
+                    // HOROS-20240407準拠: BrowserController.m 6467-6470行目
+                    // Studyでない場合はnil（ここではStudyなので値を返す）
+                    // TODO: lockedStudyの実装が必要
+                    return ""; // TODO: lockedStudyの値を返す
                     
                 case COL_PATIENT_ID:
                     return study.getPatientID() != null ? study.getPatientID() : "";
@@ -1673,36 +1837,73 @@ public class DatabaseOutlineView extends JXTreeTable {
                     return study.getStudyName() != null ? study.getStudyName() : "";
                     
                 case COL_MODALITY:
-                    // HOROS-20240407準拠: modalities()メソッドでSeriesから集約されたモダリティを取得
-                    String modalities = study.modalities();
-                    return modalities != null && !modalities.isEmpty() ? modalities : "";
+                    // HOROS-20240407準拠: BrowserController.m 6472-6475行目
+                    // return [item valueForKey:@"modality"];
+                    // Studyのmodalityプロパティを直接返す（modalities()ではない）
+                    String modality = study.getModality();
+                    return modality != null && !modality.isEmpty() ? modality : "";
                     
                 case COL_ID:
-                    // HOROS-20240407準拠: 画像数
-                    Integer numImages = study.getNumberOfImages();
-                    return numImages != null ? String.valueOf(numImages) : "0";
+                    // HOROS-20240407準拠: BrowserController.m 6560-6561行目
+                    // value = [item valueForKey:[tableColumn identifier]];
+                    // idプロパティの値を返す（画像数ではない）
+                    String id = study.getId();
+                    // HOROS-20240407準拠: idがnullまたは空の場合は空文字列を返す
+                    if (id == null || id.isEmpty()) {
+                        return "";
+                    }
+                    // HOROS-20240407準拠: idを文字列として返す（数値として処理されないように）
+                    return id;
                     
                 case COL_COMMENT:
                     return study.getComment() != null ? study.getComment() : "";
                     
                 case COL_STATE_TEXT:
-                    // TODO: 状態テキスト
-                    return "";
+                    // HOROS-20240407準拠: BrowserController.m 6459-6465行目
+                    // intValueが0の場合はnil、それ以外はstateTextを返す
+                    // HOROS-20240407準拠: BrowserController.m 14293行目 - statesArrayから文字列を取得
+                    Integer stateText = study.getStateText();
+                    if (stateText == null || stateText == 0) {
+                        return ""; // HOROS-20240407準拠: nilの場合は空文字列
+                    }
+                    // HOROS-20240407準拠: BrowserController.m 14293行目
+                    // statesArray = [@"empty", @"unread", @"reviewed", @"dictated", @"validated"]
+                    String[] statesArray = getStatesArray();
+                    if (stateText.intValue() > 0 && stateText.intValue() < statesArray.length) {
+                        return statesArray[stateText.intValue()];
+                    }
+                    return String.valueOf(stateText);
                     
                 case COL_DATE:
                     LocalDateTime date = study.getDate();
                     return date != null ? date.format(DATE_FORMATTER) : "";
                     
                 case COL_NO_FILES:
-                    // TODO: ファイル数
-                    return "";
+                    // HOROS-20240407準拠: BrowserController.m 6560-6561行目
+                    // value = [item valueForKey:[tableColumn identifier]];
+                    // noFilesプロパティの値を返す
+                    Integer noFiles = study.noFiles();
+                    return noFiles != null ? String.valueOf(noFiles) : "";
                     
                 case COL_NO_SERIES:
-                    // HOROS-20240407準拠: シリーズ数
-                    if (study.getSeries() != null) {
-                        return String.valueOf(study.getSeries().size());
+                    // HOROS-20240407準拠: BrowserController.m 6540-6546行目
+                    // imageSeriesのcountを返す
+                    // HOROS-20240407準拠: [item valueForKey:@"imageSeries"]でKVO経由でimageSeriesメソッドを呼び出す
+                    // HOROS-20240407準拠: imageSeries()を呼ぶ前に、seriesを読み込む必要がある
+                    if (browserController != null && browserController.getDatabase() != null) {
+                        browserController.getDatabase().loadSeriesForStudyIfNeeded(study);
                     }
-                    return "0";
+                    try {
+                        List<DicomSeries> imageSeriesList = study.imageSeries();
+                        if (imageSeriesList != null && !imageSeriesList.isEmpty()) {
+                            return String.valueOf(imageSeriesList.size());
+                        }
+                        // HOROS-20240407準拠: imageSeriesがnullまたは空の場合は0を返す（空文字列ではなく）
+                        return "0";
+                    } catch (Exception e) {
+                        // エラーが発生した場合は0を返す
+                        return "0";
+                    }
                     
                 case COL_DATE_ADDED:
                     LocalDateTime dateAdded = study.getDateAdded();
@@ -1726,8 +1927,27 @@ public class DatabaseOutlineView extends JXTreeTable {
                     return "";
                     
                 case COL_DATE_OF_BIRTH:
-                    // TODO: 生年月日
-                    return "";
+                    // HOROS-20240407準拠: 生年月日
+                    java.time.LocalDate dateOfBirth = study.getDateOfBirth();
+                    return dateOfBirth != null ? dateOfBirth.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")) : "";
+                    
+                case COL_LOCALSTRING:
+                    // HOROS-20240407準拠: DicomStudy.m 1291-1310行目
+                    // inDatabaseFolderがtrueの場合は"L"を返し、falseの場合は空文字列を返す
+                    String localstring = study.localstring();
+                    return localstring != null ? localstring : "";
+                    
+                case COL_COMMENT2:
+                    // HOROS-20240407準拠: MainMenu.xib 4603行目 - comment2列
+                    return study.getComment2() != null ? study.getComment2() : "";
+                    
+                case COL_COMMENT3:
+                    // HOROS-20240407準拠: MainMenu.xib 4617行目 - comment3列
+                    return study.getComment3() != null ? study.getComment3() : "";
+                    
+                case COL_COMMENT4:
+                    // HOROS-20240407準拠: MainMenu.xib 4631行目 - comment4列
+                    return study.getComment4() != null ? study.getComment4() : "";
                     
                 default:
                     return "";
@@ -1739,30 +1959,61 @@ public class DatabaseOutlineView extends JXTreeTable {
          * HOROS-20240407準拠: Seriesの場合、一部の列のみ表示
          */
         private String getSeriesValue(DicomSeries series, String columnId) {
+            // HOROS-20240407準拠: BrowserController.m 6495-6505行目
+            // Seriesの場合、特定の列は空文字列を返す
+            if (COL_DATE_OF_BIRTH.equals(columnId) ||
+                COL_REFERRING_PHYSICIAN.equals(columnId) ||
+                COL_PERFORMING_PHYSICIAN.equals(columnId) ||
+                COL_INSTITUTION_NAME.equals(columnId) ||
+                COL_PATIENT_ID.equals(columnId) ||
+                COL_YEAR_OLD.equals(columnId) ||
+                COL_ACCESSION_NUMBER.equals(columnId) ||
+                COL_NO_SERIES.equals(columnId)) {
+                return ""; // HOROS-20240407準拠: Seriesでは空文字列を返す
+            }
+            
+            // HOROS-20240407準拠: BrowserController.m 6551-6558行目
+            // Seriesの場合、studyName列はseriesDescriptionを返す
+            if (COL_STUDY_NAME.equals(columnId)) {
+                String seriesDescription = series.getSeriesDescription();
+                // HOROS-20240407準拠: BrowserController.m 6563-6570行目
+                // Seriesの場合、name, studyName, modalityが空の場合は"unknown"を返す
+                if (seriesDescription == null || seriesDescription.isEmpty()) {
+                    return "unknown"; // HOROS-20240407準拠: NSLocalizedString(@"unknown", nil)
+                }
+                return seriesDescription;
+            }
+            
+            String value = null;
+            
             switch (columnId) {
                 case COL_NAME:
-                    // HOROS-20240407準拠: Series名またはSeriesDescription
-                    String name = series.getName();
-                    if (name == null || name.isEmpty()) {
-                        name = series.getSeriesDescription();
+                    // HOROS-20240407準拠: BrowserController.m 6560-6571行目
+                    // value = [item valueForKey:[tableColumn identifier]];
+                    value = series.getName();
+                    // HOROS-20240407準拠: BrowserController.m 6563-6570行目
+                    // Seriesの場合、name, studyName, modalityが空の場合は"unknown"を返す
+                    if (value == null || value.isEmpty()) {
+                        return "unknown"; // HOROS-20240407準拠: NSLocalizedString(@"unknown", nil)
                     }
-                    if (name == null || name.isEmpty()) {
-                        name = "Series";
-                    }
-                    // シリーズ番号を追加
-                    Integer seriesNum = series.getSeriesNumber();
-                    if (seriesNum != null && seriesNum > 0) {
-                        name = name + " #" + seriesNum;
-                    }
-                    return name;
+                    return value;
                     
                 case COL_MODALITY:
-                    return series.getModality() != null ? series.getModality() : "";
+                    // HOROS-20240407準拠: BrowserController.m 6560-6571行目
+                    value = series.getModality();
+                    // HOROS-20240407準拠: BrowserController.m 6563-6570行目
+                    // Seriesの場合、name, studyName, modalityが空の場合は"unknown"を返す
+                    if (value == null || value.isEmpty()) {
+                        return "unknown"; // HOROS-20240407準拠: NSLocalizedString(@"unknown", nil)
+                    }
+                    return value;
                     
                 case COL_ID:
-                    // HOROS-20240407準拠: 画像数
-                    Integer numImages = series.getNumberOfImages();
-                    return numImages != null ? String.valueOf(numImages) : "0";
+                    // HOROS-20240407準拠: BrowserController.m 6560-6561行目
+                    // value = [item valueForKey:[tableColumn identifier]];
+                    // idプロパティの値を返す（画像数ではない）
+                    Integer seriesId = series.getId();
+                    return seriesId != null ? String.valueOf(seriesId) : "";
                     
                 case COL_DATE:
                     LocalDateTime date = series.getDate();
@@ -1771,6 +2022,31 @@ public class DatabaseOutlineView extends JXTreeTable {
                 case COL_DATE_ADDED:
                     LocalDateTime dateAdded = series.getDateAdded();
                     return dateAdded != null ? dateAdded.format(DATE_FORMATTER) : "";
+                    
+                case COL_COMMENT:
+                    return series.getComment() != null ? series.getComment() : "";
+                    
+                case COL_STATE_TEXT:
+                    // HOROS-20240407準拠: BrowserController.m 6459-6465行目
+                    // intValueが0の場合はnil、それ以外はstateTextを返す
+                    // HOROS-20240407準拠: BrowserController.m 14293行目 - statesArrayから文字列を取得
+                    Integer stateText = series.getStateText();
+                    if (stateText == null || stateText == 0) {
+                        return ""; // HOROS-20240407準拠: nilの場合は空文字列
+                    }
+                    // HOROS-20240407準拠: BrowserController.m 14293行目
+                    // statesArray = [@"empty", @"unread", @"reviewed", @"dictated", @"validated"]
+                    String[] statesArray = getStatesArray();
+                    if (stateText.intValue() > 0 && stateText.intValue() < statesArray.length) {
+                        return statesArray[stateText.intValue()];
+                    }
+                    return String.valueOf(stateText);
+                    
+                case COL_LOCALSTRING:
+                    // HOROS-20240407準拠: DicomSeries.m 510-530行目
+                    // inDatabaseFolderがtrueの場合は"L"を返し、falseの場合は空文字列を返す
+                    String localstring = series.localstring();
+                    return localstring != null ? localstring : "";
                     
                 default:
                     // HOROS-20240407準拠: Seriesでは他の列は空
@@ -1901,6 +2177,27 @@ public class DatabaseOutlineView extends JXTreeTable {
                 boolean isSelected, boolean hasFocus,
                 int row, int column) {
             
+            // HOROS-20240407準拠: 列の識別子を取得（ID列とStatus列の処理のため）
+            javax.swing.table.TableColumn tableColumnForCheck = table.getColumnModel().getColumn(column);
+            Object columnIdentifierForCheck = tableColumnForCheck != null ? tableColumnForCheck.getIdentifier() : null;
+            String columnIdForCheck = columnIdentifierForCheck != null ? columnIdentifierForCheck.toString() : null;
+            
+            // HOROS-20240407準拠: Status列はカスタムレンダラーでJPanelを使用
+            if (COL_STATE_TEXT.equals(columnIdForCheck)) {
+                return createStatusCellRenderer(table, value, isSelected, hasFocus, row, column);
+            }
+            
+            // HOROS-20240407準拠: ID列はカスタムレンダラーでJPanelを使用（数値として処理されないように）
+            if (COL_ID.equals(columnIdForCheck)) {
+                return createIdCellRenderer(table, value, isSelected, hasFocus, row, column);
+            }
+            
+            // HOROS-20240407準拠: 値がnullの場合は空文字列に変換
+            // これにより、選択行ハイライトでない場合でも値が表示される
+            if (value == null) {
+                value = "";
+            }
+            
             javax.swing.JLabel label = (javax.swing.JLabel) super.getTableCellRendererComponent(
                     table, value, isSelected, hasFocus, row, column);
             
@@ -1992,6 +2289,24 @@ public class DatabaseOutlineView extends JXTreeTable {
                                             // 薄いグレー（RGB: 220, 220, 220）を使用
                                             java.awt.Color highlightColor = new java.awt.Color(220, 220, 220);
                                             label.setBackground(highlightColor);
+                                            // HOROS-20240407準拠: alignmentを設定（returnの前に）
+                                            if (tableColumn != null && columnIdentifier != null) {
+                                                String columnId = columnIdentifier.toString();
+                                                if (COL_YEAR_OLD.equals(columnId) ||
+                                                    COL_MODALITY.equals(columnId) ||
+                                                    COL_ID.equals(columnId) ||
+                                                    COL_DATE.equals(columnId) ||
+                                                    COL_NO_FILES.equals(columnId) ||
+                                                    COL_NO_SERIES.equals(columnId) ||
+                                                    COL_DATE_ADDED.equals(columnId) ||
+                                                    COL_DATE_OPENED.equals(columnId) ||
+                                                    COL_DATE_OF_BIRTH.equals(columnId) ||
+                                                    COL_LOCALSTRING.equals(columnId)) {
+                                                    label.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+                                                } else {
+                                                    label.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+                                                }
+                                            }
                                             return label;
                                         }
                                     }
@@ -2002,6 +2317,31 @@ public class DatabaseOutlineView extends JXTreeTable {
                         }
                     }
                 }
+            }
+            
+            // HOROS-20240407準拠: MainMenu.xibの各列のalignment設定
+            // 列の識別子に応じてalignmentを設定（すべてのreturnの前に設定）
+            if (tableColumn != null && columnIdentifier != null) {
+                String columnId = columnIdentifier.toString();
+                // HOROS-20240407準拠: MainMenu.xib 4300-4644行目
+                // center: yearOld, modality, id, date, noFiles, noSeries, dateAdded, dateOpened, dateOfBirth, localstring
+                // left: その他すべて
+                if (COL_YEAR_OLD.equals(columnId) ||
+                    COL_MODALITY.equals(columnId) ||
+                    COL_ID.equals(columnId) ||
+                    COL_DATE.equals(columnId) ||
+                    COL_NO_FILES.equals(columnId) ||
+                    COL_NO_SERIES.equals(columnId) ||
+                    COL_DATE_ADDED.equals(columnId) ||
+                    COL_DATE_OPENED.equals(columnId) ||
+                    COL_DATE_OF_BIRTH.equals(columnId) ||
+                    COL_LOCALSTRING.equals(columnId)) {
+                    label.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+                } else {
+                    label.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+                }
+                
+                // HOROS-20240407準拠: Status列はcreateStatusCellRendererで処理されるため、ここでは処理しない
             }
             
             // HOROS-20240407準拠: 選択行は行全体がハイライト
@@ -2015,6 +2355,114 @@ public class DatabaseOutlineView extends JXTreeTable {
             // 一致しない場合は通常の背景色（透明）
             label.setOpaque(false);
             label.setBackground(table.getBackground());
+            
+            return label;
+        }
+        
+        // HOROS-20240407準拠: Status列のカスタムレンダラー（NSPopUpButtonCellの動作を再現）
+        private java.awt.Component createStatusCellRenderer(
+                javax.swing.JTable table, Object value,
+                boolean isSelected, boolean hasFocus,
+                int row, int column) {
+            
+            // HOROS-20240407準拠: JPanelを使用して左側にテキスト、右側にドロップダウンマークを配置
+            javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout());
+            panel.setOpaque(false);
+            
+            // テキストラベル（左側）
+            javax.swing.JLabel textLabel = new javax.swing.JLabel();
+            String text = value != null ? value.toString() : "";
+            textLabel.setText(text);
+            textLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+            textLabel.setOpaque(false);
+            
+            // ドロップダウンマーク（右側）
+            javax.swing.JLabel markLabel = new javax.swing.JLabel("▼");
+            markLabel.setHorizontalAlignment(javax.swing.SwingConstants.RIGHT);
+            markLabel.setOpaque(false);
+            
+            // レイアウト: 左側にテキスト、右側にマーク
+            panel.add(textLabel, java.awt.BorderLayout.WEST);
+            panel.add(markLabel, java.awt.BorderLayout.EAST);
+            
+            // 選択状態の背景色を設定
+            if (isSelected) {
+                panel.setOpaque(true);
+                panel.setBackground(table.getSelectionBackground());
+                textLabel.setForeground(table.getSelectionForeground());
+                markLabel.setForeground(table.getSelectionForeground());
+            } else {
+                panel.setOpaque(false);
+                panel.setBackground(table.getBackground());
+                textLabel.setForeground(table.getForeground());
+                markLabel.setForeground(table.getForeground());
+            }
+            
+            return panel;
+        }
+        
+        // HOROS-20240407準拠: ID列のカスタムレンダラー（数値として処理されないように）
+        private java.awt.Component createIdCellRenderer(
+                javax.swing.JTable table, Object value,
+                boolean isSelected, boolean hasFocus,
+                int row, int column) {
+            
+            // HOROS-20240407準拠: JLabelを使用して中央揃えで表示
+            javax.swing.JLabel label = new javax.swing.JLabel();
+            
+            // HOROS-20240407準拠: ID列の値を明示的に文字列として設定（数値として処理されないように）
+            String idValue = "";
+            if (value != null) {
+                // 数値の場合は文字列に変換
+                if (value instanceof Number) {
+                    idValue = String.valueOf(value);
+                } else {
+                    idValue = value.toString();
+                }
+            }
+            
+            // HOROS-20240407準拠: MainMenu.xib 4417行目 - lineBreakMode="clipping"
+            // HOROS-20240407準拠: BrowserController.m 6816行目 - NSLineBreakByTruncatingMiddle
+            // セルの幅に応じてテキストを省略表示（中央部分を省略）
+            if (idValue != null && !idValue.isEmpty()) {
+                // セルの幅を取得
+                int cellWidth = table.getColumnModel().getColumn(column).getWidth();
+                // フォントメトリクスを取得してテキストの幅を計算
+                java.awt.FontMetrics fm = label.getFontMetrics(label.getFont());
+                int textWidth = fm.stringWidth(idValue);
+                
+                // テキストがセルの幅を超える場合は省略表示
+                if (textWidth > cellWidth - 10) { // 10ピクセルのマージンを確保
+                    // 中央部分を省略（NSLineBreakByTruncatingMiddleに相当）
+                    // 先頭と末尾を表示し、中央を"..."で置き換え
+                    int maxChars = (cellWidth - 10) / fm.charWidth('0'); // 数字1文字の幅で計算
+                    if (maxChars > 3) {
+                        int startChars = maxChars / 2 - 1;
+                        int endChars = maxChars / 2 - 1;
+                        if (idValue.length() > startChars + endChars + 3) {
+                            idValue = idValue.substring(0, startChars) + "..." + idValue.substring(idValue.length() - endChars);
+                        }
+                    } else {
+                        // セルが非常に狭い場合は先頭のみ表示
+                        idValue = idValue.substring(0, Math.min(maxChars, idValue.length()));
+                    }
+                }
+            }
+            
+            label.setText(idValue);
+            label.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+            label.setOpaque(false);
+            
+            // 選択状態の背景色を設定
+            if (isSelected) {
+                label.setOpaque(true);
+                label.setBackground(table.getSelectionBackground());
+                label.setForeground(table.getSelectionForeground());
+            } else {
+                label.setOpaque(false);
+                label.setBackground(table.getBackground());
+                label.setForeground(table.getForeground());
+            }
             
             return label;
         }

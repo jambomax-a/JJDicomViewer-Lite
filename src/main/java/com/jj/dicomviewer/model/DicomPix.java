@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import javax.imageio.ImageIO;
-import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import org.dcm4che3.imageio.plugins.dcm.DicomImageReadParam;
@@ -50,7 +49,12 @@ public class DicomPix {
      */
     public DicomPix(String path, int imageIndex, int numberOfImages, 
                     int frameNumber, int seriesId, boolean isBonjour, DicomImage imageObj) {
-        this.path = Paths.get(path);
+        if (path != null) {
+            this.path = Paths.get(path);
+        } else {
+            this.path = null;
+            logger.warn("DicomPix constructor: path is null");
+        }
         this.imageIndex = imageIndex;
         this.numberOfImages = numberOfImages;
         this.frameNumber = frameNumber;
@@ -189,11 +193,49 @@ public class DicomPix {
             ImageInputStream iis = null;
             
             try {
-                // DicomImageReaderを取得
-                reader = new DicomImageReader(null);
+                // ImageIOプラグインをスキャン（JPEG圧縮DICOM画像を読み込むために必要）
+                ImageIO.scanForPlugins();
+                
+                // HOROS-20240407準拠: DicomImageReaderは自動的にJPEG圧縮画像を処理する
+                // dcm4che3のDicomImageReaderは、Transfer Syntaxに基づいて適切なデコンプレッサーを選択する
+                // そのため、jpeg-cvフォーマットを直接使用する必要はない
+                File dicomFile = path.toFile();
+                
+                // Transfer Syntaxを確認（デバッグ用）
+                try {
+                    org.dcm4che3.io.DicomInputStream dis = new org.dcm4che3.io.DicomInputStream(dicomFile);
+                    org.dcm4che3.data.Attributes attrs = dis.readDataset(-1, -1);
+                    String transferSyntaxUID = attrs.getString(org.dcm4che3.data.Tag.TransferSyntaxUID);
+                    if (transferSyntaxUID != null) {
+                        logger.debug("Transfer Syntax UID: {}", transferSyntaxUID);
+                        // JPEG圧縮のTransfer Syntax UIDを確認
+                        if (transferSyntaxUID.equals("1.2.840.10008.1.2.4.50") ||  // JPEG Baseline
+                            transferSyntaxUID.equals("1.2.840.10008.1.2.4.51") ||  // JPEG Extended
+                            transferSyntaxUID.equals("1.2.840.10008.1.2.4.70") ||  // JPEG Lossless
+                            transferSyntaxUID.equals("1.2.840.10008.1.2.4.57") ||  // JPEG Lossless 14
+                            transferSyntaxUID.equals("1.2.840.10008.1.2.4.90") ||  // JPEG2000 Lossless
+                            transferSyntaxUID.equals("1.2.840.10008.1.2.4.91")) {  // JPEG2000 Lossy
+                            logger.info("JPEG compressed DICOM image detected (Transfer Syntax: {})", transferSyntaxUID);
+                        }
+                    }
+                    dis.close();
+                } catch (Exception e) {
+                    logger.debug("Could not read Transfer Syntax UID: {}", e.getMessage());
+                }
+                
+                // DICOMフォーマット名でImageReaderを取得
+                // DicomImageReaderは内部的にJPEG圧縮画像を処理する
+                java.util.Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("DICOM");
+                if (readers.hasNext()) {
+                    reader = readers.next();
+                    logger.debug("Using ImageReader: {}", reader.getClass().getName());
+                } else {
+                    // フォールバック: DicomImageReaderを直接作成
+                    reader = new DicomImageReader(null);
+                    logger.debug("Using DicomImageReader directly (no ImageReader found via ImageIO)");
+                }
                 
                 // ファイルを開く
-                File dicomFile = path.toFile();
                 iis = ImageIO.createImageInputStream(dicomFile);
                 reader.setInput(iis);
                 
@@ -210,7 +252,48 @@ public class DicomPix {
                 int frameIndex = frameNumber >= 0 ? frameNumber : 0;
                 
                 // 画像を読み込む
-                bufferedImage = reader.read(frameIndex, param);
+                // DicomImageReaderは内部的にTransfer Syntaxを確認し、適切なデコンプレッサーを使用する
+                // NativeImageReaderが失敗した場合、例外がスローされるため、フォールバック処理を追加
+                try {
+                    logger.debug("Attempting to read frame {} from DICOM file", frameIndex);
+                    bufferedImage = reader.read(frameIndex, param);
+                    if (bufferedImage != null) {
+                        logger.debug("Successfully read DICOM image: {}x{}", bufferedImage.getWidth(), bufferedImage.getHeight());
+                    } else {
+                        logger.warn("DicomImageReader.read() returned null for frame {}", frameIndex);
+                    }
+                } catch (RuntimeException e) {
+                    logger.error("RuntimeException while reading DICOM image from {}: {}", path, e.getMessage(), e);
+                    // NativeImageReaderが失敗した場合（OpenCVネイティブライブラリが見つからない、またはdicomJpgFileReadメソッドが存在しないなど）
+                    String errorMsg = e.getMessage();
+                    Throwable cause = e.getCause();
+                    boolean isOpenCVError = false;
+                    
+                    // OpenCV関連のエラーをチェック
+                    if (errorMsg != null && (errorMsg.contains("opencv") || errorMsg.contains("opencv_java") || 
+                        errorMsg.contains("No stream adaptor") || errorMsg.contains("StreamSegment") ||
+                        errorMsg.contains("No Reader for format: jpeg-cv") ||
+                        errorMsg.contains("dicomJpgFileRead") || errorMsg.contains("UnsatisfiedLinkError"))) {
+                        isOpenCVError = true;
+                    }
+                    if (cause != null && (cause instanceof UnsatisfiedLinkError || 
+                        (cause.getMessage() != null && cause.getMessage().contains("dicomJpgFileRead")))) {
+                        isOpenCVError = true;
+                    }
+                    
+                    if (isOpenCVError) {
+                        logger.warn("NativeImageReader failed (OpenCV native method not found or inaccessible). " +
+                                "This may be due to missing dicomJpgFileRead method in OpenCV native library. File: {}", path);
+                        logger.warn("Note: The OpenCV native library may not have the custom dicomJpgFileRead method. " +
+                                "JPEG compressed DICOM images may not be readable without a properly built OpenCV library.");
+                        // DicomImageReaderは内部的にJava実装のJPEGデコンプレッサーにフォールバックする可能性があるが、
+                        // 実際にはNativeImageReaderが失敗すると、JPEG圧縮画像を読み込むことは困難
+                        throw new UnsupportedOperationException("JPEG compressed DICOM images require OpenCV native library " +
+                                "with dicomJpgFileRead method. The current OpenCV library may not support this method.", e);
+                    } else {
+                        throw e;
+                    }
+                }
                 
                 if (bufferedImage != null) {
                     width = bufferedImage.getWidth();
@@ -234,8 +317,35 @@ public class DicomPix {
                 }
             }
             
+        } catch (RuntimeException e) {
+            // HOROS-20240407準拠: JPEG圧縮画像の読み込みエラーを処理
+            // DicomImageReaderが内部的にNativeImageReaderを使用しようとして失敗する場合がある
+            // これは、OpenCVネイティブライブラリが見つからない場合に発生する
+            String errorMsg = e.getMessage();
+            if (errorMsg != null) {
+                if (errorMsg.contains("opencv") || errorMsg.contains("opencv_java") || 
+                    errorMsg.contains("No stream adaptor") || errorMsg.contains("StreamSegment")) {
+                    logger.warn("JPEG compressed DICOM image cannot be loaded: OpenCV native library not found or inaccessible. File: {}", path);
+                    logger.debug("Error details: {}", errorMsg);
+                } else if (errorMsg.contains("jpeg-cv")) {
+                    logger.debug("JPEG compressed DICOM image (jpeg-cv) cannot be loaded without dcm4che-imageio-opencv: {}", path);
+                } else {
+                    logger.error("Error loading DICOM image from {}", path, e);
+                }
+            } else {
+                logger.error("Error loading DICOM image from {}: {}", path, e.getClass().getSimpleName(), e);
+            }
+            bufferedImage = null;
         } catch (Exception e) {
-            logger.error("Error loading DICOM image from {}", path, e);
+            // その他の例外
+            String errorMsg = e.getMessage();
+            if (errorMsg != null && (errorMsg.contains("opencv") || errorMsg.contains("opencv_java") || 
+                errorMsg.contains("No stream adaptor") || errorMsg.contains("StreamSegment"))) {
+                logger.warn("JPEG compressed DICOM image cannot be loaded: OpenCV native library not found or inaccessible. File: {}", path);
+                logger.debug("Error details: {}", errorMsg);
+            } else {
+                logger.error("Error loading DICOM image from {}", path, e);
+            }
             bufferedImage = null;
         }
     }

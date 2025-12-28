@@ -1,0 +1,11 @@
+{
+  "weasisPreferences": [
+    {
+      "code": "felix.auto.start.3",
+      "value": "${weasis.codebase.url}/bundle/org.apache.felix.gogo.command-1.1.2.jar.xz ${weasis.codebase.url}/bundle/org.apache.felix.gogo.shell-1.1.4.jar.xz",
+      "description": "OSGI command and shell",
+      "type": "A",
+      "category": "FELIX_INSTALL"
+    }
+  ]
+}

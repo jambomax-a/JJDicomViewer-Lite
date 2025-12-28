@@ -453,8 +453,10 @@ public class DicomDatabase {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     sopInstanceUID TEXT UNIQUE,
                     seriesId INTEGER,
+                    pathNumber INTEGER,
                     pathString TEXT,
                     completePath TEXT,
+                    inDatabaseFolder INTEGER DEFAULT 1,
                     instanceNumber INTEGER,
                     numberOfFrames INTEGER DEFAULT 1,
                     frameID INTEGER,
@@ -693,8 +695,25 @@ public class DicomDatabase {
                     }
                 }
                 
-                // DBのIDを保存（遅延読み込み用）
-                study.setId(String.valueOf(studyDbId));
+                // HOROS-20240407準拠: idプロパティの値を設定
+                // HOROS-20240407準拠: BrowserController.m 6560-6561行目では、[item valueForKey:@"id"]を返している
+                // HOROS-20240407準拠: ユーザー確認により、ID列にはStudyID（DICOMのStudyIDタグ）が表示されている
+                // HOROS-20240407準拠: DicomStudy.h 66行目 - @property(nonatomic, retain) NSString* id;
+                // HOROS-20240407準拠: idプロパティにはStudyIDの値が設定されている
+                String studyID = study.getStudyID();
+                if (studyID != null && !studyID.isEmpty()) {
+                    // HOROS-20240407準拠: StudyIDをidプロパティとして使用
+                    study.setId(studyID);
+                } else {
+                    // StudyIDがない場合は、空文字列を設定
+                    study.setId("");
+                }
+                
+                // HOROS-20240407準拠: DBのIDを内部で保持（Series/Imageの読み込みに必要）
+                // 注意: study.getId()はStudyID（DICOMタグ）を返すため、DBのIDは別途保持する必要がある
+                // ただし、HOROS-20240407ではCore DataのobjectIDを使用しているため、Java実装では
+                // studyDbIdを文字列としてidプロパティに設定するか、別の方法で保持する必要がある
+                // 現在は、loadSeriesForStudyIfNeeded()でstudyInstanceUIDからstudyDbIdを取得する方法を使用
                 
                 String dateStr = rs.getString("date");
                 if (dateStr != null && !dateStr.isEmpty()) {
@@ -734,15 +753,19 @@ public class DicomDatabase {
      * HOROS-20240407準拠: Studyが選択されたときに呼び出される
      */
     public void loadSeriesForStudyIfNeeded(DicomStudy study) {
-        if (study == null || study.getSeries() != null && !study.getSeries().isEmpty()) {
+        if (study == null || (study.getSeries() != null && !study.getSeries().isEmpty())) {
             return; // 既に読み込み済み
         }
         
         try {
-            String idStr = study.getId();
-            if (idStr != null && !idStr.isEmpty()) {
-                int studyDbId = Integer.parseInt(idStr);
-                loadSeriesForStudy(study, studyDbId);
+            // HOROS-20240407準拠: studyInstanceUIDからstudyDbIdを取得
+            // 注意: study.getId()はStudyID（DICOMタグ）を返すため、DBのIDは別途取得する必要がある
+            String studyInstanceUID = study.getStudyInstanceUID();
+            if (studyInstanceUID != null && !studyInstanceUID.isEmpty()) {
+                int studyDbId = getStudyDbId(studyInstanceUID);
+                if (studyDbId > 0) {
+                    loadSeriesForStudy(study, studyDbId);
+                }
             }
         } catch (Exception e) {
             logger.error("Failed to load series for study: {}", study.getStudyInstanceUID(), e);
@@ -842,8 +865,26 @@ public class DicomDatabase {
                 while (rs.next()) {
                     DicomImage image = new DicomImage();
                     image.setSopInstanceUID(rs.getString("sopInstanceUID"));
+                    // HOROS-20240407準拠: pathNumberとpathStringの両方を読み込む
+                    try {
+                        Integer pathNumber = rs.getObject("pathNumber", Integer.class);
+                        if (pathNumber != null) {
+                            image.setPathNumber(pathNumber);
+                        }
+                    } catch (SQLException e) {
+                        // pathNumberカラムが存在しない場合は無視（既存DBの互換性）
+                    }
                     image.setPathString(rs.getString("pathString"));
-                    image.setCompletePathCache(rs.getString("completePath"));
+                    // HOROS-20240407準拠: completePathCacheはDBから読み込まない（path()から再計算する）
+                    // image.setCompletePathCache(rs.getString("completePath"));
+                    // HOROS-20240407準拠: inDatabaseFolderも読み込む
+                    try {
+                        Boolean inDatabaseFolder = rs.getBoolean("inDatabaseFolder");
+                        image.setInDatabaseFolder(inDatabaseFolder);
+                    } catch (SQLException e) {
+                        // inDatabaseFolderカラムが存在しない場合はデフォルト値（true）を使用
+                        image.setInDatabaseFolder(true);
+                    }
                     image.setInstanceNumber(rs.getInt("instanceNumber"));
                     image.setNumberOfFrames(rs.getInt("numberOfFrames"));
                     image.setFrameID(rs.getInt("frameID"));
@@ -1053,25 +1094,29 @@ public class DicomDatabase {
     private void saveImage(DicomImage image, int seriesDbId) throws SQLException {
         String sql = """
             INSERT OR REPLACE INTO Image 
-            (sopInstanceUID, seriesId, pathString, completePath, instanceNumber,
+            (sopInstanceUID, seriesId, pathNumber, pathString, completePath, inDatabaseFolder, instanceNumber,
              numberOfFrames, frameID, date, modality, fileType, height, width, sliceLocation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         
         try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
             pstmt.setString(1, image.getSopInstanceUID());
             pstmt.setInt(2, seriesDbId);
-            pstmt.setString(3, image.getPathString());
-            pstmt.setString(4, image.getCompletePath());
-            pstmt.setInt(5, image.getInstanceNumber() != null ? image.getInstanceNumber() : 0);
-            pstmt.setInt(6, image.getNumberOfFrames() != null ? image.getNumberOfFrames() : 1);
-            pstmt.setInt(7, image.getFrameID() != null ? image.getFrameID() : 0);
-            pstmt.setString(8, image.getDate() != null ? image.getDate().toString() : null);
-            pstmt.setString(9, image.getModality());
-            pstmt.setString(10, image.getFileType());
-            pstmt.setInt(11, image.getHeight() != null ? image.getHeight() : 0);
-            pstmt.setInt(12, image.getWidth() != null ? image.getWidth() : 0);
-            pstmt.setFloat(13, image.getSliceLocation() != null ? image.getSliceLocation().floatValue() : 0);
+            // HOROS-20240407準拠: pathNumberとpathStringの両方を保存
+            pstmt.setObject(3, image.getPathNumber());
+            pstmt.setString(4, image.getPathString());
+            pstmt.setString(5, image.getCompletePath());
+            // HOROS-20240407準拠: inDatabaseFolderも保存
+            pstmt.setBoolean(6, image.getInDatabaseFolder() != null && image.getInDatabaseFolder());
+            pstmt.setInt(7, image.getInstanceNumber() != null ? image.getInstanceNumber() : 0);
+            pstmt.setInt(8, image.getNumberOfFrames() != null ? image.getNumberOfFrames() : 1);
+            pstmt.setInt(9, image.getFrameID() != null ? image.getFrameID() : 0);
+            pstmt.setString(10, image.getDate() != null ? image.getDate().toString() : null);
+            pstmt.setString(11, image.getModality());
+            pstmt.setString(12, image.getFileType());
+            pstmt.setInt(13, image.getHeight() != null ? image.getHeight() : 0);
+            pstmt.setInt(14, image.getWidth() != null ? image.getWidth() : 0);
+            pstmt.setFloat(15, image.getSliceLocation() != null ? image.getSliceLocation().floatValue() : 0);
             
             pstmt.executeUpdate();
         }
@@ -1632,7 +1677,7 @@ public class DicomDatabase {
         LocalDateTime defaultDate = LocalDateTime.of(1901, 1, 1, 0, 0, 0);
         
         // HOROS-20240407準拠: NSString* dataDirPath = self.dataDirPath; (1802行目)
-        String dataDirPath = this.dataBaseDirPath;
+        String dataDirPath = this.dataDirPath();
         
         // HOROS-20240407準拠: NSMutableArray* studiesArray = [[self objectsForEntity:self.studyEntity] mutableCopy]; (1789行目)
         List<DicomStudy> studiesArray = new java.util.ArrayList<>();
@@ -1742,27 +1787,14 @@ public class DicomDatabase {
                         curSerieID = null;
                     }
                     
-                    // HOROS-20240407準拠: Studyのフィールドを設定（1994-2056行目）
+                    // HOROS-20240407準拠: Studyのフィールドを設定（1996-2045行目）
                     if (newObject || inParseExistingObject) {
+                        // HOROS-20240407準拠: DicomDatabase.mm 1996-2004行目
                         study.setStudyInstanceUID(studyID);
                         study.setAccessionNumber((String) curDict.get("accessionNumber"));
-                        study.setPatientID((String) curDict.get("patientID"));
-                        study.setName((String) curDict.get("patientName"));
-                        study.setPatientUID(patientUID);
-                        study.setStudyID((String) curDict.get("studyNumber"));
-                        
-                        study.setStudyName((String) curDict.get("studyDescription"));
-                        study.setReferringPhysician((String) curDict.get("referringPhysiciansName"));
-                        study.setPerformingPhysician((String) curDict.get("performingPhysiciansName"));
-                        study.setInstitutionName((String) curDict.get("institutionName"));
-                        
-                        // HOROS-20240407準拠: studyNameが空または"unnamed"の場合はseriesDescriptionを使用（2025-2026行目）
-                        String studyName = study.getStudyName();
-                        if (studyName == null || studyName.isEmpty() || studyName.equals("unnamed")) {
-                            study.setStudyName((String) curDict.get("seriesDescription"));
-                        }
-                        
-                        // HOROS-20240407準拠: dateOfBirthを設定（1999行目）
+                        // HOROS-20240407準拠: 1998行目 - study.modality = study.modalities;
+                        study.setModality(study.modalities());
+                        study.setDateOfBirth(null); // 後で設定
                         Object patientBirthDateObj = curDict.get("patientBirthDate");
                         if (patientBirthDateObj != null) {
                             if (patientBirthDateObj instanceof Date) {
@@ -1778,25 +1810,58 @@ public class DicomDatabase {
                                 }
                             }
                         }
-                        
-                        // HOROS-20240407準拠: patientSexを設定
-                        String patientSex = (String) curDict.get("patientSex");
-                        if (patientSex != null) {
-                            study.setPatientSex(patientSex);
+                        study.setPatientSex((String) curDict.get("patientSex"));
+                        study.setPatientID((String) curDict.get("patientID"));
+                        study.setName((String) curDict.get("patientName"));
+                        study.setPatientUID(patientUID);
+                        String studyNumber = (String) curDict.get("studyNumber");
+                        study.setStudyID(studyNumber);
+                        // HOROS-20240407準拠: idプロパティにStudyIDを設定
+                        // HOROS-20240407準拠: BrowserController.m 6560-6561行目では、[item valueForKey:@"id"]を返している
+                        // HOROS-20240407準拠: idプロパティにはStudyID（DICOMのStudyIDタグ）の値が設定されている
+                        if (studyNumber != null && !studyNumber.isEmpty()) {
+                            study.setId(studyNumber);
+                        } else {
+                            study.setId("");
                         }
                         
-                        // HOROS-20240407準拠: studyDateを設定（2047-2051行目）
-                        Date studyDate = (Date) curDict.get("studyDate");
-                        if (studyDate != null) {
-                            LocalDateTime studyDateLocal = LocalDateTime.ofInstant(studyDate.toInstant(), ZoneId.systemDefault());
-                            if (studyDateLocal.isAfter(defaultDate)) {
-                                if (study.getDate() == null || study.getDate().isBefore(studyDateLocal)) {
-                                    study.setDate(studyDateLocal);
-                                }
+                        // HOROS-20240407準拠: 2006-2016行目 - SR/PDFの特別処理
+                        // sopClassUIDは既に1680行目で定義されているため、ここでは使用するだけ
+                        boolean isStructuredReport = false; // TODO: DCMAbstractSyntaxUID.isStructuredReport()で判定
+                        boolean isPDF = false; // TODO: DCMAbstractSyntaxUID.isPDF()で判定
+                        
+                        if ((isStructuredReport || isPDF) && inParseExistingObject) {
+                            String studyDescription = (String) curDict.get("studyDescription");
+                            if (studyDescription != null && !studyDescription.isEmpty() && !studyDescription.equals("unnamed")) {
+                                study.setStudyName(studyDescription);
                             }
+                            String referringPhysician = (String) curDict.get("referringPhysiciansName");
+                            if (referringPhysician != null && !referringPhysician.isEmpty()) {
+                                study.setReferringPhysician(referringPhysician);
+                            }
+                            String performingPhysician = (String) curDict.get("performingPhysiciansName");
+                            if (performingPhysician != null && !performingPhysician.isEmpty()) {
+                                study.setPerformingPhysician(performingPhysician);
+                            }
+                            String institutionName = (String) curDict.get("institutionName");
+                            if (institutionName != null && !institutionName.isEmpty()) {
+                                study.setInstitutionName(institutionName);
                         }
                     } else {
-                        // HOROS-20240407準拠: 既存のStudyの場合もstudyNameを更新（2035-2045行目）
+                            // HOROS-20240407準拠: 2019-2023行目
+                            study.setStudyName((String) curDict.get("studyDescription"));
+                            study.setReferringPhysician((String) curDict.get("referringPhysiciansName"));
+                            study.setPerformingPhysician((String) curDict.get("performingPhysiciansName"));
+                            study.setInstitutionName((String) curDict.get("institutionName"));
+                        }
+                        
+                        // HOROS-20240407準拠: 2025-2026行目
+                        String studyName = study.getStudyName();
+                        if (studyName == null || studyName.isEmpty() || studyName.equals("unnamed")) {
+                            study.setStudyName((String) curDict.get("seriesDescription"));
+                        }
+                    } else {
+                        // HOROS-20240407準拠: 既存のStudyの場合（2035-2045行目）
                         // modalityが"SR"または"OT"の場合は更新（2037-2038行目）
                         String modality = study.getModality();
                         if ("SR".equals(modality) || "OT".equals(modality)) {
@@ -1806,7 +1871,7 @@ public class DicomDatabase {
                             }
                         }
                         
-                        // HOROS-20240407準拠: studyNameが空または"unnamed"の場合は更新（2040-2044行目）
+                        // HOROS-20240407準拠: 2040-2044行目
                         String currentStudyName = study.getStudyName();
                         if (currentStudyName == null || currentStudyName.isEmpty() || currentStudyName.equals("unnamed")) {
                             String studyDescription = (String) curDict.get("studyDescription");
@@ -1814,13 +1879,21 @@ public class DicomDatabase {
                                 study.setStudyName(studyDescription);
                             }
                         }
-                        
-                        // HOROS-20240407準拠: studyNameが空または"unnamed"の場合はseriesDescriptionを使用（2043-2044行目）
-                        String updatedStudyName = study.getStudyName();
-                        if (updatedStudyName == null || updatedStudyName.isEmpty() || updatedStudyName.equals("unnamed")) {
+                        if (study.getStudyName() == null || study.getStudyName().isEmpty() || study.getStudyName().equals("unnamed")) {
                             String seriesDescription = (String) curDict.get("seriesDescription");
                             if (seriesDescription != null) {
                                 study.setStudyName(seriesDescription);
+                            }
+                        }
+                    }
+                    
+                    // HOROS-20240407準拠: 2047-2051行目 - studyDateを設定
+                    Date studyDate = (Date) curDict.get("studyDate");
+                    if (studyDate != null) {
+                        LocalDateTime studyDateLocal = LocalDateTime.ofInstant(studyDate.toInstant(), ZoneId.systemDefault());
+                        if (studyDateLocal.isAfter(defaultDate)) {
+                            if (study.getDate() == null || study.getDate().isBefore(studyDateLocal)) {
+                                study.setDate(studyDateLocal);
                             }
                         }
                     }
@@ -1865,16 +1938,37 @@ public class DicomDatabase {
                     }
                     
                     if (newObject || inParseExistingObject) {
+                        // HOROS-20240407準拠: DicomDatabase.mm 2092-2100行目
+                        if (curDict.get("seriesDICOMUID") != null) {
+                            series.setSeriesDICOMUID((String) curDict.get("seriesDICOMUID"));
+                        }
+                        if (curDict.get("SOPClassUID") != null) {
+                            series.setSeriesSOPClassUID((String) curDict.get("SOPClassUID"));
+                        }
                         series.setSeriesInstanceUID(seriesID);
                         series.setName((String) curDict.get("seriesDescription"));
                         series.setModality((String) curDict.get("modality"));
-                        series.setSeriesNumber(((Number) curDict.get("seriesNumber")).intValue());
+                        Object seriesNumberObj = curDict.get("seriesNumber");
+                        if (seriesNumberObj != null) {
+                            if (seriesNumberObj instanceof Number) {
+                                series.setSeriesNumber(((Number) seriesNumberObj).intValue());
+                            }
+                        }
                         series.setSeriesDescription((String) curDict.get("protocolName"));
                         series.setStudy(study);
                         
                         Date seriesDate = (Date) curDict.get("studyDate");
                         if (seriesDate != null) {
                             series.setDate(LocalDateTime.ofInstant(seriesDate.toInstant(), ZoneId.systemDefault()));
+                        }
+                        
+                        // HOROS-20240407準拠: 2104-2106行目 - Studyのモダリティを更新
+                        // Studyのモダリティが"OT"または"SC"で、Seriesのモダリティが"OT"または"SC"でない場合は更新
+                        String studyModality = study.getModality();
+                        String seriesModality = (String) curDict.get("modality");
+                        if (("OT".equals(studyModality) || "SC".equals(studyModality)) && 
+                            seriesModality != null && !"OT".equals(seriesModality) && !"SC".equals(seriesModality)) {
+                            study.setModality(seriesModality);
                         }
                     }
                     
@@ -1923,21 +2017,126 @@ public class DicomDatabase {
                     }
                     
                     if (newObject || inParseExistingObject) {
-                        image.setSopInstanceUID(sopUID);
+                        // HOROS-20240407準拠: DicomDatabase.mm 2198-2248行目
                         image.setFrameID(f);
-                        image.setInstanceNumber(((Number) curDict.getOrDefault("imageID", 0)).intValue());
-                        image.setPathString(new java.io.File(newFile).getName());
-                        image.setCompletePathCache(newFile);
-                        image.setSliceLocation(((Number) curDict.getOrDefault("sliceLocation", 0.0)).doubleValue());
-                        image.setHeight(((Number) curDict.getOrDefault("height", 0)).intValue());
-                        image.setWidth(((Number) curDict.getOrDefault("width", 0)).intValue());
-                        image.setFileType((String) curDict.get("fileType"));
-                        image.setSeries(series);
                         
+                        // HOROS-20240407準拠: 2200-2216行目 - instanceNumberの設定（combineProjectionSeriesの処理は省略）
+                        Object imageIDObj = curDict.get("imageID");
+                        if (imageIDObj != null) {
+                            if (imageIDObj instanceof Number) {
+                                int instanceNumber = ((Number) imageIDObj).intValue();
+                                image.setInstanceNumber(instanceNumber + f);
+                            }
+                        } else {
+                            image.setInstanceNumber(0);
+                        }
+                        
+                        // HOROS-20240407準拠: 2218-2219行目 - pathの設定
+                        // HOROS-20240407準拠: if (local) [image setValue: [newFile lastPathComponent] forKey:@"path"];
+                        // HOROS-20240407準拠: else [image setValue:newFile forKey:@"path"];
+                        // HOROS-20240407準拠: localの判定（ファイルがDBフォルダ内かどうか）
+                        // HOROS-20240407準拠: DicomDatabase.mm 2115-2117行目
+                        // HOROS-20240407準拠: BOOL local = NO; if (dataDirPath && [newFile hasPrefix:dataDirPath]) local = YES;
+                        boolean local = false;
+                        String dataDirPathValue = this.dataDirPath();
+                        if (dataDirPathValue != null && !dataDirPathValue.isEmpty() && newFile != null) {
+                            // HOROS-20240407準拠: hasPrefix:は文字列の先頭一致判定
+                            local = newFile.startsWith(dataDirPathValue);
+                        }
+                        if (local) {
+                            // HOROS-20240407準拠: setPath:メソッドを使用（pathNumber/pathStringの自動設定）
+                            image.setPath(new java.io.File(newFile).getName());
+                        } else {
+                            // HOROS-20240407準拠: 絶対パスの場合はpathStringに設定
+                            image.setPath(newFile);
+                        }
+                        // HOROS-20240407準拠: 2221行目 - inDatabaseFolderの設定
+                        image.setInDatabaseFolder(local);
+                        
+                        // HOROS-20240407準拠: 2223行目 - dateの設定
                         Date imageDate = (Date) curDict.get("studyDate");
                         if (imageDate != null) {
                             image.setDate(LocalDateTime.ofInstant(imageDate.toInstant(), ZoneId.systemDefault()));
                         }
+                        
+                        // HOROS-20240407準拠: 2225行目 - sopInstanceUIDの設定
+                        image.setSopInstanceUID(sopUID);
+                        
+                        // HOROS-20240407準拠: 2227-2230行目 - sliceLocationの設定
+                        Object sliceLocationObj = curDict.get("sliceLocation");
+                        if (sliceLocationObj != null) {
+                            if (sliceLocationObj instanceof Number) {
+                                image.setSliceLocation(((Number) sliceLocationObj).doubleValue());
+                            }
+                        } else {
+                            image.setSliceLocation(0.0);
+                        }
+                        
+                        // HOROS-20240407準拠: 2232-2233行目 - commentの設定（imageCommentPerFrameの処理は省略）
+                        // TODO: imageCommentPerFrameの処理を実装
+                        
+                        // HOROS-20240407準拠: 2235行目 - extensionの設定
+                        String extension = new java.io.File(newFile).getName();
+                        int lastDot = extension.lastIndexOf('.');
+                        if (lastDot >= 0 && lastDot < extension.length() - 1) {
+                            extension = extension.substring(lastDot + 1).toLowerCase();
+                        } else {
+                            extension = "dcm";
+                        }
+                        image.setExtension(extension);
+                        
+                        // HOROS-20240407準拠: 2236行目 - fileTypeの設定
+                        image.setFileType((String) curDict.get("fileType"));
+                        
+                        // HOROS-20240407準拠: 2238-2239行目 - height, widthの設定
+                        Object heightObj = curDict.get("height");
+                        if (heightObj != null && heightObj instanceof Number) {
+                            image.setHeight(((Number) heightObj).intValue());
+                        } else {
+                            image.setHeight(0);
+                        }
+                        Object widthObj = curDict.get("width");
+                        if (widthObj != null && widthObj instanceof Number) {
+                            image.setWidth(((Number) widthObj).intValue());
+                        } else {
+                            image.setWidth(0);
+                        }
+                        
+                        // HOROS-20240407準拠: 2240-2241行目 - numberOfFrames, numberOfSeriesの設定
+                        Object numberOfFramesObj = curDict.get("numberOfFrames");
+                        if (numberOfFramesObj != null && numberOfFramesObj instanceof Number) {
+                            image.setNumberOfFrames(((Number) numberOfFramesObj).intValue());
+                        } else {
+                            image.setNumberOfFrames(1);
+                        }
+                        Object numberOfSeriesObj = curDict.get("numberOfSeries");
+                        if (numberOfSeriesObj != null && numberOfSeriesObj instanceof Number) {
+                            image.setNumberOfSeries(((Number) numberOfSeriesObj).intValue());
+                        } else {
+                            image.setNumberOfSeries(1);
+                        }
+                        
+                        // HOROS-20240407準拠: 2243行目 - thumbnailの設定
+                        // TODO: NSImageThumbnailからImageに変換
+                        Object thumbnailObj = curDict.get("NSImageThumbnail");
+                        if (thumbnailObj != null && thumbnailObj instanceof java.awt.Image) {
+                            image.setThumbnail((java.awt.Image) thumbnailObj);
+                        }
+                        
+                        // HOROS-20240407準拠: 2245-2248行目 - importedFileの設定
+                        if (importedFiles) {
+                            image.setImportedFile(true);
+                        } else {
+                            image.setImportedFile(null);
+                        }
+                        
+                        image.setSeries(series);
+                        
+                        // HOROS-20240407準拠: 2260-2261行目 - Imageのモダリティを設定し、Studyのモダリティを更新
+                        // [image setValue: [curDict objectForKey: @"modality"]  forKey:@"modality"];
+                        image.setModality((String) curDict.get("modality"));
+                        // [study setValue:[study valueForKey:@"modalities"] forKey:@"modality"];
+                        study.setModality(study.modalities());
                     }
                     
                     // HOROS-20240407準拠: SeriesにImageを追加
@@ -2107,7 +2306,14 @@ public class DicomDatabase {
         dict.put("filePath", file.getAbsolutePath());
         
         // HOROS-20240407準拠: fileType (1693行目)
+        // HOROS-20240407準拠: Transfer Syntax UIDを確認してMPEG2を識別
+        // DicomFileDCMTKCategory.mm 326行目、DicomDatabase+Scan.mm 236行目
         String fileType = "DICOM";
+        String transferSyntaxUID = attrs.getString(Tag.TransferSyntaxUID);
+        if (transferSyntaxUID != null && transferSyntaxUID.equals("1.2.840.10008.1.2.4.100")) {
+            // HOROS-20240407準拠: MPEG2 Main Profile at Main Level
+            fileType = "DICOMMPEG2";
+        }
         dict.put("fileType", fileType);
         dict.put("hasDICOM", true);
         

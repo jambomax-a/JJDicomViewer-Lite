@@ -128,22 +128,102 @@ public class DicomImage {
     /**
      * 完全パスを取得
      * HOROS-20240407準拠: [image valueForKey:@"completePath"]
+     * HOROS-20240407準拠: DicomImage.m 1096-1099行目
+     * - (NSString*) completePath { return [self completePathWithDownload: NO]; }
      */
     public String completePath() {
-        if (completePathCache != null && !completePathCache.isEmpty()) {
-            return completePathCache;
-        }
-        // フォールバック: pathStringから構築
-        if (pathString != null && !pathString.isEmpty()) {
-            // pathStringが絶対パスの場合はそのまま返す
-            java.io.File file = new java.io.File(pathString);
-            if (file.isAbsolute()) {
-                return pathString;
+        return completePathWithDownload(false);
+    }
+    
+    /**
+     * ダウンロード付き完全パスを取得
+     * HOROS-20240407準拠: - (NSString*) completePathWithDownload:(BOOL) download (1081行目)
+     */
+    public String completePathWithDownload(boolean download) {
+        return completePathWithDownload(download, true);
+    }
+    
+    /**
+     * ダウンロード付き完全パスを取得（非ローカルDB対応）
+     * HOROS-20240407準拠: - (NSString *)completePathWithDownload:(BOOL)download supportNonLocalDatabase:(BOOL)supportNonLocalDatabase (1024-1079行目)
+     */
+    public String completePathWithDownload(boolean download, boolean supportNonLocalDatabase) {
+        try {
+            // HOROS-20240407準拠: if(self.completePathCache && download == NO) return self.completePathCache; (1028-1029行目)
+            if (completePathCache != null && !completePathCache.isEmpty() && !download) {
+                return completePathCache;
             }
-            // 相対パスの場合は、現在のディレクトリから構築
-            return new java.io.File(System.getProperty("user.dir"), pathString).getAbsolutePath();
+            
+            // HOROS-20240407準拠: DicomDatabase* db = [DicomDatabase databaseForContext: self.managedObjectContext]; (1031行目)
+            com.jj.dicomviewer.model.DicomDatabase db = getDatabase();
+            
+            // HOROS-20240407準拠: BOOL isLocal = YES; (1033行目)
+            // HOROS-20240407準拠: if (supportNonLocalDatabase) isLocal = [db isLocal]; (1034-1035行目)
+            boolean isLocal = true;
+            if (supportNonLocalDatabase && db != null) {
+                isLocal = db.isLocal();
+            }
+            
+            // HOROS-20240407準拠: if (self.completePathCache) { ... } (1037-1042行目)
+            if (completePathCache != null && !completePathCache.isEmpty()) {
+                if (!download) {
+                    return completePathCache;
+                } else if (isLocal) {
+                    return completePathCache;
+                }
+            }
+            
+            // HOROS-20240407準拠: #ifdef OSIRIX_VIEWER (1044行目)
+            // HOROS-20240407準拠: if( [self.inDatabaseFolder boolValue] == YES) (1045行目)
+            if (inDatabaseFolder != null && inDatabaseFolder && db != null) {
+                // HOROS-20240407準拠: NSString *path = self.path; (1047行目)
+                String pathValue = path();
+                
+                // HOROS-20240407準拠: if( !isLocal) { ... } (1049-1061行目)
+                if (!isLocal) {
+                    // HOROS-20240407準拠: NSString* temp = [DicomImage completePathForLocalPath:path directory:db.dataBaseDirPath]; (1051行目)
+                    String temp = completePathForLocalPath(pathValue, db.getDataBaseDirPath());
+                    // HOROS-20240407準拠: if ([[NSFileManager defaultManager] fileExistsAtPath:temp]) return temp; (1052-1053行目)
+                    java.io.File tempFile = new java.io.File(temp);
+                    if (tempFile.exists()) {
+                        return temp;
+                    }
+                    
+                    // HOROS-20240407準拠: if (download) self.completePathCache = [[(RemoteDicomDatabase*)db cacheDataForImage:self maxFiles:1] retain]; (1055-1056行目)
+                    // HOROS-20240407準拠: else self.completePathCache = [[(RemoteDicomDatabase*)db localPathForImage:self] retain]; (1057-1058行目)
+                    // HOROS-20240407準拠: return self.completePathCache; (1060行目)
+                    // RemoteDicomDatabaseの処理（TODO: 実装が必要）
+                    // 現在はtempを返す（HOROS-20240407準拠: RemoteDicomDatabaseが実装されていない場合）
+                    completePathCache = temp;
+                    return temp;
+                } else {
+                    // HOROS-20240407準拠: if( [path characterAtIndex: 0] != '/') (1064行目)
+                    if (pathValue != null && !pathValue.isEmpty() && pathValue.charAt(0) != '/') {
+                        // HOROS-20240407準拠: return (self.completePathCache = [[DicomImage completePathForLocalPath:path directory:db.dataBaseDirPath] retain]); (1066行目)
+                        String completePath = completePathForLocalPath(pathValue, db.getDataBaseDirPath());
+                        completePathCache = completePath;
+                        return completePath;
+                    }
+                }
+            }
+            
+            // HOROS-20240407準拠: return self.path; (1072行目)
+            return path();
+        } catch (Exception e) {
+            // HOROS-20240407準拠: @catch (NSException *e) { N2LogExceptionWithStackTrace(e); } (1074-1076行目)
+            // エラーログは出力しない（HOROS-20240407準拠）
+            return path();
         }
-        return null;
+    }
+    
+    /**
+     * データベースを取得
+     * HOROS-20240407準拠: DicomImage.m 1031行目
+     * DicomDatabase* db = [DicomDatabase databaseForContext: self.managedObjectContext];
+     */
+    private com.jj.dicomviewer.model.DicomDatabase getDatabase() {
+        // HOROS-20240407準拠: databaseForContextが失敗した場合はdefaultDatabaseを使用
+        return com.jj.dicomviewer.model.DicomDatabase.defaultDatabase();
     }
     
     /**
@@ -231,10 +311,70 @@ public class DicomImage {
     
     /**
      * パスを取得
+     * HOROS-20240407準拠: - (NSString*) path (970-977行目)
      */
     public String path() {
-        // TODO: 実装
+        // HOROS-20240407準拠: NSNumber *pathNumber = [self primitiveValueForKey: @"pathNumber"]; (972行目)
+        // HOROS-20240407準拠: if( pathNumber) return [NSString stringWithFormat:@"%d.dcm", [pathNumber intValue]]; (974-975行目)
+        if (pathNumber != null) {
+            return String.format("%d.dcm", pathNumber);
+        }
+        // HOROS-20240407準拠: else return [self primitiveValueForKey: @"pathString"]; (976行目)
         return pathString;
+    }
+    
+    /**
+     * パスを設定
+     * HOROS-20240407準拠: - (void) setPath:(NSString*) p (979-1005行目)
+     */
+    public void setPath(String p) {
+        if (p == null || p.isEmpty()) {
+            pathNumber = null;
+            pathString = null;
+            return;
+        }
+        
+        // HOROS-20240407準拠: if( [p characterAtIndex: 0] != '/') (983行目)
+        java.io.File pathFile = new java.io.File(p);
+        if (!pathFile.isAbsolute()) {
+            // HOROS-20240407準拠: if( [[p pathExtension] isEqualToString:@"dcm"]) (985行目)
+            String extension = "";
+            int lastDot = p.lastIndexOf('.');
+            if (lastDot > 0 && lastDot < p.length() - 1) {
+                extension = p.substring(lastDot + 1).toLowerCase();
+            }
+            
+            if ("dcm".equals(extension)) {
+                // HOROS-20240407準拠: [self setPrimitiveValue: [NSNumber numberWithInt: [p intValue]] forKey:@"pathNumber"]; (988行目)
+                // HOROS-20240407準拠: intValueは文字列の先頭から数値を読み取り、数値でない文字が現れたら停止
+                // 例: "0001" -> 1, "IM-0001-0001" -> 0 (先頭が数値でないため)
+                // HOROS-20240407準拠: intValueが0でもpathNumberに0を設定する
+                String pathWithoutExt = p.substring(0, lastDot);
+                int intValue = 0;
+                try {
+                    // 先頭から数値を読み取る（HOROS-20240407準拠: intValueの動作）
+                    java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^\\s*(\\d+)");
+                    java.util.regex.Matcher matcher = pattern.matcher(pathWithoutExt);
+                    if (matcher.find()) {
+                        intValue = Integer.parseInt(matcher.group(1));
+                    }
+                    // 数値が見つからない場合は0（HOROS-20240407準拠: intValueは0を返す）
+                } catch (NumberFormatException e) {
+                    intValue = 0;
+                }
+                
+                // HOROS-20240407準拠: intValueが0でもpathNumberに設定する
+                pathNumber = intValue;
+                // HOROS-20240407準拠: [self setPrimitiveValue: nil forKey:@"pathString"]; (992行目)
+                pathString = null;
+                return;
+            }
+        }
+        
+        // HOROS-20240407準拠: [self setPrimitiveValue: nil forKey:@"pathNumber"]; (998-1000行目)
+        // HOROS-20240407準拠: [self setPrimitiveValue: p forKey:@"pathString"]; (1002-1004行目)
+        pathNumber = null;
+        pathString = p;
     }
     
     /**
@@ -272,24 +412,62 @@ public class DicomImage {
         this.isKeyImage = keyImage;
     }
     
-    /**
-     * ダウンロード付き完全パスを取得
-     */
-    public String completePathWithDownload(boolean download, boolean supportNonLocalDatabase) {
-        // TODO: 実装
-        return completePath();
-    }
     
     /**
      * ローカルパスの完全パスを取得
+     * HOROS-20240407準拠: + (NSString*) completePathForLocalPath:(NSString*) path directory:(NSString*) directory (954-968行目)
      */
     public static String completePathForLocalPath(String path, String directory) {
-        // TODO: 実装
-        if (path == null) return null;
-        if (directory != null && !directory.isEmpty()) {
-            return directory + File.separator + path;
+        if (path == null || directory == null || directory.isEmpty()) {
+            return path;
         }
-        return path;
+        
+        // HOROS-20240407準拠: if( [path characterAtIndex: 0] != '/') (956行目)
+        java.io.File pathFile = new java.io.File(path);
+        if (!pathFile.isAbsolute()) {
+            // HOROS-20240407準拠: long val = [[path stringByDeletingPathExtension] intValue]; (958行目)
+            // 拡張子を削除
+            String pathWithoutExt = path;
+            int lastDot = path.lastIndexOf('.');
+            if (lastDot > 0) {
+                pathWithoutExt = path.substring(0, lastDot);
+            }
+            
+            // HOROS-20240407準拠: intValueは文字列の先頭から数値を読み取り、数値でない文字が現れたら停止
+            // 例: "0001" -> 1, "IM-0001-0001" -> 0 (先頭が数値でないため)
+            // しかし、HOROS-20240407では通常 "0001.dcm" のような形式なので、先頭から数値を読み取る
+            long val = 0;
+            try {
+                // 先頭から数値を読み取る（HOROS-20240407準拠: intValueの動作）
+                java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^\\s*(\\d+)");
+                java.util.regex.Matcher matcher = pattern.matcher(pathWithoutExt);
+                if (matcher.find()) {
+                    val = Long.parseLong(matcher.group(1));
+                } else {
+                    // 数値が見つからない場合は0（HOROS-20240407準拠: intValueは0を返す）
+                    val = 0;
+                }
+            } catch (NumberFormatException e) {
+                val = 0;
+            }
+            
+            // HOROS-20240407準拠: NSString *dbLocation = [directory stringByAppendingPathComponent: @"DATABASE.noindex"]; (959行目)
+            String dbLocation = directory + File.separator + "DATABASE.noindex";
+            
+            // HOROS-20240407準拠: val /= [BrowserController DefaultFolderSizeForDB]; (961行目)
+            // HOROS-20240407準拠: val++; (962行目)
+            // HOROS-20240407準拠: val *= [BrowserController DefaultFolderSizeForDB]; (963行目)
+            int defaultFolderSizeForDB = 10000; // HOROS-20240407準拠: BrowserController.m 535行目
+            val = val / defaultFolderSizeForDB;
+            val++;
+            val = val * defaultFolderSizeForDB;
+            
+            // HOROS-20240407準拠: return [[dbLocation stringByAppendingPathComponent: [NSString stringWithFormat: @"%d", (int) val]] stringByAppendingPathComponent: path]; (965行目)
+            return dbLocation + File.separator + val + File.separator + path;
+        } else {
+            // HOROS-20240407準拠: else return path; (967行目)
+            return path;
+        }
     }
     
     // ========== プロパティアクセサ ==========

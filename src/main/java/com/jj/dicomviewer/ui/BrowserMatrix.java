@@ -49,6 +49,9 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
     private Dimension cellSize = new Dimension(105, 113);
     private int intercellSpacingX = 0;
     private int intercellSpacingY = 0;
+    // HOROS-20240407準拠: 垂直スクロールバーの幅分の余白を確保
+    // MainMenu.xib準拠: マトリックスの幅がスクロールビューの幅より広い（424px vs 384px）
+    private int scrollbarWidth = 0;
     
     /**
      * カスタムレイアウトマネージャー：セルサイズを固定
@@ -116,6 +119,9 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
         private Dimension sizeToCells() {
             if (rows > 0 && columns > 0) {
                 int width = columns * cellSize.width + (columns - 1) * Math.max(0, intercellSpacingX);
+                // HOROS-20240407準拠: 垂直スクロールバーの幅分の余白を追加
+                // MainMenu.xib準拠: マトリックスの幅がスクロールビューの幅より広い
+                width += scrollbarWidth;
                 int height = rows * cellSize.height + (rows - 1) * Math.max(0, intercellSpacingY);
                 return new Dimension(width, height);
             }
@@ -141,16 +147,37 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
     
     /**
      * マトリックスのサイズをセルに合わせて調整
-     * HOROS-20240407準拠: [oMatrix sizeToCells]
+     * HOROS-20240407準拠: [oMatrix sizeToCells] (BrowserMatrix.m - NSMatrixのデフォルト実装を使用)
+     * セルのサイズと間隔に基づいてマトリックスのサイズを計算する
+     * スクロールバーの幅は考慮しない（previewMatrixScrollViewFrameDidChangeで考慮される）
      */
     public void sizeToCells() {
         if (rows > 0 && columns > 0) {
+            // セルに基づく幅を計算
             int width = columns * cellSize.width + (columns - 1) * Math.max(0, intercellSpacingX);
             int height = rows * cellSize.height + (rows - 1) * Math.max(0, intercellSpacingY);
-            setPreferredSize(new Dimension(width, height));
-            setMinimumSize(new Dimension(width, height));
+            java.awt.Dimension size = new java.awt.Dimension(width, height);
+            setPreferredSize(size);
+            setMinimumSize(size);
+            setMaximumSize(new java.awt.Dimension(width, Integer.MAX_VALUE));
+            // HOROS-20240407準拠: マトリックスのサイズを直接設定
+            // JScrollPaneのJViewportが正しく認識するように
+            setSize(size);
+            // レイアウトを強制的に再計算
+            invalidate();
             revalidate();
+            repaint();
         }
+    }
+    
+    /**
+     * マトリックスのサイズをセルに合わせて調整（互換性のためのオーバーロード）
+     * HOROS-20240407準拠: 引数なしのsizeToCells()を使用することを推奨
+     */
+    @Deprecated
+    public void sizeToCells(int scrollbarWidth) {
+        // 互換性のため、引数は無視してsizeToCells()を呼び出す
+        sizeToCells();
     }
     
     /**
@@ -219,6 +246,9 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
             cell.setContentAreaFilled(false);
             cell.setBorderPainted(false);
             cell.setFocusPainted(false);
+            // HOROS-20240407準拠: renewRowsでセルが再生成された場合、すべてのセルを無効化
+            // matrixDisplayIconsで必要なセルを有効化する
+            cell.setEnabled(false);
             cell.putClientProperty("tag", i); // タグとしてインデックスを設定
             cells.add(cell);
             add(cell);

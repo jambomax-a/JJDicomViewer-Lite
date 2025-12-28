@@ -132,9 +132,45 @@ public class DicomSeries {
     /**
      * 生ファイル数を取得
      */
+    /**
+     * 生ファイル数を取得
+     * HOROS-20240407準拠: DicomSeries.m 532-554行目
+     */
     public Integer rawNoFiles() {
-        // TODO: 実装
-        return numberOfImages;
+        // HOROS-20240407準拠: DicomSeries.m 539-544行目
+        // 最初のImageのnumberOfFramesを確認
+        if (images != null && !images.isEmpty()) {
+            DicomImage firstImage = images.iterator().next();
+            if (firstImage != null) {
+                Integer numberOfFrames = firstImage.getNumberOfFrames();
+                if (numberOfFrames != null && numberOfFrames.intValue() > 1) {
+                    // HOROS-20240407準拠: DicomSeries.m 542行目
+                    // numberOfFrames > 1 の場合は images.count - numberOfFrames + 1
+                    return images.size() - numberOfFrames.intValue() + 1;
+                } else {
+                    // HOROS-20240407準拠: DicomSeries.m 544行目
+                    // それ以外の場合は images.count
+                    return images.size();
+                }
+            }
+        }
+        
+        // 画像がない場合は0
+        return 0;
+    }
+    
+    /**
+     * ファイル数を取得
+     * HOROS-20240407準拠: DicomSeries.m のnoFilesメソッド
+     */
+    public Integer noFiles() {
+        // HOROS-20240407準拠: DicomSeriesのnoFilesはnumberOfImagesを返す
+        // またはrawNoFilesを返す（実装によって異なる）
+        if (numberOfImages != null) {
+            return numberOfImages;
+        }
+        // numberOfImagesがnullの場合はrawNoFilesを返す
+        return rawNoFiles();
     }
     
     /**
@@ -323,6 +359,33 @@ public class DicomSeries {
                 image.setSeries(null);
             }
         }
+    }
+    
+    /**
+     * localstringを取得
+     * HOROS-20240407準拠: DicomSeries.m 510-530行目
+     * inDatabaseFolderがtrueの場合は"L"を返し、falseの場合は空文字列を返す
+     */
+    public String localstring() {
+        boolean local = true;
+        
+        try {
+            // HOROS-20240407準拠: 最初のImageのinDatabaseFolderをチェック
+            if (images != null && !images.isEmpty()) {
+                DicomImage firstImage = images.iterator().next();
+                if (firstImage != null) {
+                    Boolean inDatabaseFolder = firstImage.getInDatabaseFolder();
+                    // HOROS-20240407準拠: inDatabaseFolderがtrueの場合はlocal=true、それ以外はfalse
+                    local = (inDatabaseFolder != null && inDatabaseFolder.booleanValue());
+                }
+            }
+        } catch (Exception e) {
+            // エラーが発生した場合はデフォルト値（true）を使用
+            local = true;
+        }
+        
+        // HOROS-20240407準拠: localがtrueの場合は"L"を返し、falseの場合は空文字列を返す
+        return local ? "L" : "";
     }
 }
 
