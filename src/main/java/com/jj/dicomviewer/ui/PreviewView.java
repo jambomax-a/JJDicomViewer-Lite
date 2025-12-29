@@ -80,33 +80,31 @@ public class PreviewView extends DCMView {
     }
     
     /**
-     * HOROS: pixelsを設定（List版）
+     * setPixels - ピクセルデータを設定（簡易版）
+     * HOROS-20240407準拠: BrowserController.m 9619行目
+     * [imageView setPixels:previewPix files:[self imagesArray: aFile preferredObject: oAny] rois:nil firstImage:[[oMatrix selectedCell] tag] level:'i' reset:YES];
      */
     public void setPixels(List<DicomPix> pixels) {
-        // TODO: 実装 - pixelsを設定して表示を更新
+        setPixels(pixels, null, null, (short) 0, 'i', true);
     }
     
     /**
-     * HOROS: pixelsを設定（Listとインデックス版）
+     * setPixels - ピクセルデータを設定（完全版）
+     * HOROS-20240407準拠: DCMView.m 2176行目
      */
-    public void setPixels(List<DicomPix> pixels, int index) {
-        // TODO: 実装 - pixelsとインデックスを設定して表示を更新
-        setPixels(pixels);
+    public void setPixels(List<DicomPix> pixels, List<Object> files, List<Object> rois, short firstImage, char level, boolean reset) {
+        // HOROS-20240407準拠: DCMViewのsetPixelsを呼び出す
+        super.setPixels(pixels, files, rois, firstImage, level, reset);
     }
     
     /**
      * インデックスを設定
      * HOROS-20240407準拠: - (void)setIndex:(int)index (DCMView.m)
+     * PreviewViewはDCMViewを継承しているため、親クラスのsetIndexを呼び出す
      */
-    private int currentIndex = 0;
-    
+    @Override
     public void setIndex(int index) {
-        this.currentIndex = index;
-        // TODO: インデックスに応じた画像を表示
-        repaint();
-    }
-    
-    public int getIndex() {
-        return currentIndex;
+        // HOROS-20240407準拠: DCMViewのsetIndexを呼び出す
+        super.setIndex(index);
     }
 }

@@ -250,6 +250,33 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
             // matrixDisplayIconsで必要なセルを有効化する
             cell.setEnabled(false);
             cell.putClientProperty("tag", i); // タグとしてインデックスを設定
+            
+            // HOROS-20240407準拠: BrowserController.m 9503行目 - [cell setAction: @selector(matrixPressed:)];
+            // セルがクリックされたときに、セルを選択してハイライトし、matrixPressedを呼び出す
+            final int cellIndex = i;
+            cell.addActionListener(e -> {
+                // HOROS-20240407準拠: セルを選択してハイライト
+                selectCellWithTag(cellIndex);
+                // HOROS-20240407準拠: matrixPressedを呼び出す
+                if (browserController != null) {
+                    browserController.matrixPressed(this);
+                }
+            });
+            
+            // HOROS-20240407準拠: ダブルクリック処理
+            // BrowserController.m 14245行目 - [oMatrix setDoubleAction:@selector(matrixDoublePressed:)];
+            cell.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent e) {
+                    if (e.getClickCount() == 2) {
+                        // HOROS-20240407準拠: matrixDoublePressedを呼び出す
+                        if (browserController != null) {
+                            browserController.matrixDoublePressed(BrowserMatrix.this);
+                        }
+                    }
+                }
+            });
+            
             cells.add(cell);
             add(cell);
         }
