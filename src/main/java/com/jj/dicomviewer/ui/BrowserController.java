@@ -43,6 +43,14 @@ public class BrowserController extends JFrame {
     // HOROS-20240407準拠: static BrowserController *browserWindow = nil; (170行目)
     private static BrowserController browserWindow = null;
     
+    /**
+     * HOROS-20240407準拠: BrowserController.h 327行目 - + (BrowserController*) currentBrowser;
+     * BrowserController.m 521行目 - + (BrowserController*) currentBrowser { return browserWindow; }
+     */
+    public static BrowserController currentBrowser() {
+        return browserWindow;
+    }
+    
     // HOROS-20240407準拠: DicomDatabase* _database; (80行目)
     private DicomDatabase database;
     
@@ -863,9 +871,20 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 4864行目 - customView id="1166" customClass="PreviewView"
         // HOROS-20240407準拠: BrowserController.h 146行目 IBOutlet PreviewView *imageView;
         imageView = new PreviewView();
+        // HOROS-20240407準拠: BrowserController.m 6490行目、12635行目
+        // annotationType = [[NSUserDefaults standardUserDefaults] integerForKey:@"ANNOTATIONS"];
+        // HOROS-20240407準拠: デフォルト値はannotBase（定規とアノテーションを表示）
+        int annotationType = java.util.prefs.Preferences.userNodeForPackage(BrowserController.class).getInt("ANNOTATIONS", DCMView.annotBase);
+        System.out.println("[DEBUG] BrowserController.initializeUIComponents() - setting annotationType: " + annotationType);
+        imageView.setAnnotationType(annotationType);
         // HOROS-20240407準拠: BrowserController.m 14250行目 - [imageView setTheMatrix:oMatrix];
         imageView.setTheMatrix(oMatrix);
         imageView.setBrowserController(this);
+        
+        // HOROS-20240407準拠: 左右の矢印キーで画像を遷移できるようにKeyListenerを設定
+        if (oMatrix != null) {
+            oMatrix.setupKeyListener();
+        }
         
         // HOROS-20240407準拠: マウススクロール処理を追加
         // BrowserController.m 9264行目: - (void)scrollWheel: (NSEvent *)theEvent
@@ -1054,9 +1073,9 @@ public class BrowserController extends JFrame {
         // Playチェックボックスの左隣に配置（幅294pxのまま）
         animationSlider.setBounds(611 - 60 - 294, 2, 294, 16);
         animationSlider.addChangeListener(e -> {
-            if (!animationSlider.getValueIsAdjusting()) {
-                previewSliderAction(animationSlider);
-            }
+            // HOROS-20240407準拠: スライダーの値が変更されたときにpreviewSliderActionを呼び出す
+            // getValueIsAdjusting()のチェックを削除して、常にpreviewSliderActionを呼び出す
+            previewSliderAction(animationSlider);
         });
         rightStatusPanel.add(animationSlider);
         
@@ -3078,8 +3097,19 @@ public class BrowserController extends JFrame {
                     } else {
                         System.out.println("[DEBUG] matrixPressed() - imageCount <= 1, not calling previewSliderAction");
                     }
+                } else if ("Study".equals(type)) {
+                    // HOROS-20240407準拠: BrowserController.m 9329行目 - Studyタイプの場合
+                    // HOROS-20240407準拠: BrowserController.m 9375行目 - [self initAnimationSlider];
+                    // initAnimationSlider内でpreviewSliderActionが呼び出される（BrowserController.m 5033行目）
+                    // しかし、Studyタイプの場合、previewSliderActionを直接呼び出す方が確実
+                    if (animationSlider != null && index >= 0) {
+                        animationSlider.setValue(index);
+                    }
+                    System.out.println("[DEBUG] matrixPressed() - type is Study, calling previewSliderAction");
+                    previewSliderAction(null);
+                    return;
                 } else {
-                    System.out.println("[DEBUG] matrixPressed() - type is not Series: " + type);
+                    System.out.println("[DEBUG] matrixPressed() - type is not Series or Study: " + type);
                 }
             }
         }
@@ -3154,32 +3184,12 @@ public class BrowserController extends JFrame {
                     //     index = [theCell tag];
                     //     [imageView setIndex: index];
                     // }
-                    // スタディレベルの場合はsetIndexを呼び出さない（BrowserController.m 9369行目）
-                    // しかし、HOROS-20240407の実装を見ると、previewSliderActionではStudyタイプの場合、
-                    // matrixViewArrayからSeriesを取得してsetIndexを呼び出している
-                    // そのため、ここではpreviewPixが既にスタディ全体の画像リストを保持しているため、
-                    // setPixelsを呼び出す必要はなく、setIndex(index)を呼び出すだけでよい
-                    System.out.println("[DEBUG] matrixPressed() - type is Study, using previewPix index: " + index);
-                    if (imageView != null) {
-                        synchronized (previewPixThumbnails) {
-                            // HOROS-20240407準拠: previewPixが既にスタディ全体の画像リストを保持しているため、
-                            // setPixelsを呼び出す必要はなく、setIndex(index)を呼び出すだけでよい
-                            // previewPixのインデックスは、matrixViewArrayのインデックスと一致している
-                            if (previewPix != null && index >= 0 && index < previewPix.size()) {
-                                System.out.println("[DEBUG] matrixPressed() - calling imageView.setIndex(" + index + ") for Study type");
-                                imageView.setIndex(index);
-                                System.out.println("[DEBUG] matrixPressed() - imageView.setIndex(" + index + ") completed");
-                            } else {
-                                System.out.println("[DEBUG] matrixPressed() - previewPix is null or index out of range: previewPix=" + (previewPix != null ? previewPix.size() : "null") + ", index=" + index);
-                            }
-                        }
-                    } else {
-                        System.out.println("[DEBUG] matrixPressed() - imageView is null");
-                    }
+                    // スタディレベルの場合はsetIndexを直接呼び出さない（BrowserController.m 9369行目）
+                    // initAnimationSlider内でpreviewSliderActionが呼び出される（BrowserController.m 5033行目）
+                    System.out.println("[DEBUG] matrixPressed() - type is Study, will be handled by initAnimationSlider");
                 }
-                // HOROS-20240407準拠: スタディレベルの場合はsetIndexを呼び出さない（BrowserController.m 9369行目）
-                
-                // HOROS-20240407準拠: [self initAnimationSlider];
+                // HOROS-20240407準拠: BrowserController.m 9375行目 - [self initAnimationSlider];
+                // initAnimationSlider内でpreviewSliderActionが呼び出される（BrowserController.m 5033行目）
                 initAnimationSlider();
             } else {
                 System.out.println("[DEBUG] matrixPressed() - dcmFile is null");
@@ -5046,19 +5056,6 @@ public class BrowserController extends JFrame {
         
         javax.swing.JButton cell = oMatrix != null ? oMatrix.selectedCell() : null;
         System.out.println("[DEBUG] previewSliderAction() - cell: " + cell);
-        if (cell == null || !cell.isEnabled()) {
-            System.out.println("[DEBUG] previewSliderAction() - cell is null or disabled, returning");
-            return;
-        }
-        
-        Object tagObj = cell.getClientProperty("tag");
-        int index = tagObj instanceof Integer ? (Integer) tagObj : -1;
-        System.out.println("[DEBUG] previewSliderAction() - index: " + index);
-        
-        if (index < 0 || matrixViewArray == null || index >= matrixViewArray.size()) {
-            System.out.println("[DEBUG] previewSliderAction() - index out of range, returning");
-            return;
-        }
         
         Object aFile = databaseOutline.getSelectedItem();
         System.out.println("[DEBUG] previewSliderAction() - aFile: " + aFile);
@@ -5070,8 +5067,62 @@ public class BrowserController extends JFrame {
         String type = getItemType(aFile);
         System.out.println("[DEBUG] previewSliderAction() - type: " + type);
         
-        // HOROS-20240407準拠: BrowserController.m 9102-9106行目 - シリーズレベルの処理
+        // HOROS-20240407準拠: Studyタイプの場合、cellがnullでも処理を続行
+        // Seriesタイプの場合、cellがnullまたはdisabledの場合は早期リターン
+        if (!"Study".equals(type)) {
+            if (cell == null || !cell.isEnabled()) {
+                System.out.println("[DEBUG] previewSliderAction() - cell is null or disabled, returning");
+                return;
+            }
+        }
+        
+        int index = -1;
+        if (cell != null) {
+            Object tagObj = cell.getClientProperty("tag");
+            index = tagObj instanceof Integer ? (Integer) tagObj : -1;
+        } else if ("Study".equals(type) && animationSlider != null) {
+            // HOROS-20240407準拠: Studyタイプでcellがnullの場合、animationSliderの値を使用
+            index = animationSlider.getValue();
+        }
+        System.out.println("[DEBUG] previewSliderAction() - index: " + index);
+        
+        // HOROS-20240407準拠: BrowserController.m 9095-9145行目 - Studyタイプの処理
+        if ("Study".equals(type)) {
+            // HOROS-20240407準拠: Studyタイプの場合、previewPixのサイズを使用
+            if (previewPix != null && !previewPix.isEmpty()) {
+                // HOROS-20240407準拠: animationSliderの値を使用（senderが存在する場合）
+                if (sender != null && animationSlider != null) {
+                    index = animationSlider.getValue();
+                }
+                // indexが範囲外の場合は調整
+                if (index < 0) index = 0;
+                if (index >= previewPix.size()) index = previewPix.size() - 1;
+                
+                // HOROS-20240407準拠: BrowserController.m 9104-9105行目
+                // if( sender) [oMatrix selectCellWithTag: [animationSlider intValue]];
+                // senderが存在する場合（スライドバー操作時）はサムネイルを選択
+                if (sender != null && oMatrix != null) {
+                    oMatrix.selectCellWithTag(index);
+                }
+                
+                System.out.println("[DEBUG] previewSliderAction() - calling imageView.setIndex(" + index + ") for Study (sender=" + (sender != null ? "not null" : "null") + ", previewPix.size()=" + previewPix.size() + ")");
+                if (imageView != null && index >= 0 && index < previewPix.size()) {
+                    // HOROS-20240407準拠: BrowserController.m 9144-9145行目
+                    // [imageView setIndex:[cell tag]];
+                    imageView.setIndex(index);
+                }
+            } else {
+                System.out.println("[DEBUG] previewSliderAction() - Study type: previewPix is null or empty");
+            }
+            return; // Studyタイプの場合はここで終了
+        }
+        
+        // Seriesタイプの場合の処理
         if ("Series".equals(type)) {
+            if (index < 0 || matrixViewArray == null || index >= matrixViewArray.size()) {
+                System.out.println("[DEBUG] previewSliderAction() - index out of range, returning");
+                return;
+            }
             int imageCount = getItemImageCount(aFile);
             System.out.println("[DEBUG] previewSliderAction() - imageCount: " + imageCount);
             if (imageCount > 1 && animationSlider != null) {
@@ -5094,31 +5145,71 @@ public class BrowserController extends JFrame {
             }
         } else if ("Study".equals(type)) {
             // HOROS-20240407準拠: BrowserController.m 9099-9100行目 - スタディレベルの処理
-            // HOROS-20240407準拠: Studyタイプの場合、senderが存在する場合（スライダー操作時）は
-            // animationSliderの値を使用してサムネイルを選択し、そのインデックスで画像を表示する
-            // HOROS-20240407準拠: BrowserController.m 9104-9105行目
-            // if( sender) [oMatrix selectCellWithTag: [animationSlider intValue]];
-            int targetIndex = index;
+            // HOROS-20240407準拠: Studyタイプの場合、matrixViewArrayからSeriesを取得して画像を表示
+            // HOROS-20240407準拠: BrowserController.m 9100行目 - images = [self imagesArray: [matrixViewArray objectAtIndex: [cell tag]]];
+            // cellは既に定義されているため、cellTagを使用
+            int cellTag = index;
+            if (cell != null) {
+                Object cellTagObj = cell.getClientProperty("tag");
+                if (cellTagObj instanceof Integer) {
+                    cellTag = (Integer) cellTagObj;
+                }
+            }
+            
+            // HOROS-20240407準拠: senderが存在する場合（スライダー操作時）は、animationSliderの値を使用
+            int targetIndex = cellTag;
             if (sender != null && animationSlider != null) {
                 // HOROS-20240407準拠: スライダー操作時は、animationSliderの値を使用
                 targetIndex = animationSlider.getValue();
-                // HOROS-20240407準拠: サムネイルを選択
+                // HOROS-20240407準拠: BrowserController.m 9104-9105行目
+                // if( sender) [oMatrix selectCellWithTag: [animationSlider intValue]];
                 if (oMatrix != null && targetIndex >= 0 && targetIndex < (previewPix != null ? previewPix.size() : 0)) {
                     oMatrix.selectCellWithTag(targetIndex);
                 }
             }
             
-            // HOROS-20240407準拠: BrowserController.m 9138-9144行目
-            // [previewPix replaceObjectAtIndex:[cell tag] withObject:(id) dcmPix];
-            // if( withReset) [imageView setIndexWithReset:[cell tag] :YES];
-            if (imageView != null && previewPix != null && targetIndex >= 0 && targetIndex < previewPix.size()) {
-                // HOROS-20240407準拠: previewPixのインデックスを使用して画像を表示
-                System.out.println("[DEBUG] previewSliderAction() - calling imageView.setIndex(" + targetIndex + ") for Study (sender=" + (sender != null ? "not null" : "null") + ", index=" + index + ")");
-                imageView.setIndex(targetIndex);
+            // HOROS-20240407準拠: BrowserController.m 9100行目 - images = [self imagesArray: [matrixViewArray objectAtIndex: [cell tag]]];
+            if (matrixViewArray != null && cellTag >= 0 && cellTag < matrixViewArray.size()) {
+                Object seriesObj = matrixViewArray.get(cellTag);
+                List<Object> images = imagesArray(seriesObj, oAny);
+                
+                if (!images.isEmpty() && imageView != null && previewPix != null) {
+                    // HOROS-20240407準拠: BrowserController.m 9117行目 - if( [animationSlider intValue] >= [images count]) return;
+                    if (targetIndex >= 0 && targetIndex < images.size() && targetIndex < previewPix.size()) {
+                        // HOROS-20240407準拠: BrowserController.m 9119-9145行目
+                        // 画像を読み込んでpreviewPixに設定し、setIndexを呼び出す
+                        Object imageObj = images.get(targetIndex);
+                        if (imageObj != null) {
+                            // TODO: DCMPixの読み込み処理（現時点では既にpreviewPixに設定されていると仮定）
+                            // HOROS-20240407準拠: BrowserController.m 9144-9145行目
+                            // if( withReset) [imageView setIndexWithReset:[cell tag] :YES];
+                            // else [imageView setIndex:[cell tag]];
+                            System.out.println("[DEBUG] previewSliderAction() - calling imageView.setIndex(" + targetIndex + ") for Study (sender=" + (sender != null ? "not null" : "null") + ", cellTag=" + cellTag + ")");
+                            if (withReset) {
+                                imageView.setIndexWithReset((short) targetIndex, true);
+                            } else {
+                                imageView.setIndex(targetIndex);
+                            }
+                        }
+                    }
+                } else {
+                    System.out.println("[DEBUG] previewSliderAction() - Study type: images=" + (images != null ? images.size() : "null") + ", previewPix=" + (previewPix != null ? previewPix.size() : "null") + ", targetIndex=" + targetIndex);
+                }
             } else {
-                System.out.println("[DEBUG] previewSliderAction() - Study type: imageView=" + (imageView != null ? "not null" : "null") + ", previewPix=" + (previewPix != null ? previewPix.size() : "null") + ", targetIndex=" + targetIndex);
+                System.out.println("[DEBUG] previewSliderAction() - Study type: matrixViewArray=" + (matrixViewArray != null ? matrixViewArray.size() : "null") + ", cellTag=" + cellTag);
             }
         }
+    }
+    
+    /**
+     * 選択されたアイテムを取得
+     * HOROS-20240407準拠: アノテーション表示用
+     */
+    public Object getSelectedItem() {
+        if (databaseOutline != null) {
+            return databaseOutline.getSelectedItem();
+        }
+        return null;
     }
     
     /**

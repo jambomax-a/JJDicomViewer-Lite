@@ -37,9 +37,13 @@ public class PreviewView extends DCMView {
     
     /**
      * HOROS: BrowserControllerを設定
+     * HOROS-20240407準拠: PreviewView.mにはsetBrowserControllerメソッドは存在しない
+     * しかし、scrollWheelで使用するため、browserControllerフィールドは保持
      */
     public void setBrowserController(BrowserController controller) {
         this.browserController = controller;
+        // HOROS-20240407準拠: DCMViewはBrowserController.currentBrowser()を使用するため、
+        // super.setBrowserController()の呼び出しは不要
     }
     
     /**

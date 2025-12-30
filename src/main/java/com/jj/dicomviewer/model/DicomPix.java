@@ -43,6 +43,30 @@ public class DicomPix {
     private int width;
     private int height;
     
+    // HOROS-20240407準拠: DCMPix.h 106行目 - pixelSpacingX, pixelSpacingY, pixelRatio
+    private double pixelSpacingX = 0.0;
+    private double pixelSpacingY = 0.0;
+    private double pixelRatio = 1.0;
+    
+    // HOROS-20240407準拠: DCMPix.h 108行目 - pixelSpacingFromUltrasoundRegions
+    private boolean pixelSpacingFromUltrasoundRegions = false;
+    
+    // HOROS-20240407準拠: DCMPix.h 175行目 - sliceThickness, sliceLocation
+    private double sliceThickness = 0.0;
+    private double sliceLocation = 0.0;
+    
+    // HOROS-20240407準拠: DCMPix.h 93行目 - orientation[9]
+    // Image Orientation (Patient) (0020,0037) - 6つの値（行方向ベクトル3つ、列方向ベクトル3つ）
+    private double[] orientation = new double[9]; // デフォルトは単位行列
+    
+    // HOROS-20240407準拠: Transfer Syntax UID (0002,0010)
+    // 圧縮形式の判定に使用
+    private String transferSyntaxUID = null;
+    
+    // HOROS-20240407準拠: DCMPix.m 3655行目 - modalityString
+    // Modality (0008,0060) - モダリティ（CT, MR, CR, USなど）
+    private String modality = null;
+    
     /**
      * コンストラクタ
      * HOROS-20240407: - (id)initWithPath:(NSString*)path :(short)imageNb :(short)numberOfImages :(float*)fVolumePtr :(short)frameNo :(int)serieNo isBonjour:(BOOL)isBonjour imageObj:(DicomImage*)imageObj
@@ -201,12 +225,17 @@ public class DicomPix {
                 // そのため、jpeg-cvフォーマットを直接使用する必要はない
                 File dicomFile = path.toFile();
                 
-                // Transfer Syntaxを確認（デバッグ用）
+                // DICOM属性を読み込む（Transfer Syntax、Pixel Spacingなど）
+                org.dcm4che3.data.Attributes attrs = null;
                 try {
                     org.dcm4che3.io.DicomInputStream dis = new org.dcm4che3.io.DicomInputStream(dicomFile);
-                    org.dcm4che3.data.Attributes attrs = dis.readDataset(-1, -1);
+                    attrs = dis.readDataset(-1, -1);
+                    dis.close();
+                    
+                    // Transfer Syntaxを確認（デバッグ用）
                     String transferSyntaxUID = attrs.getString(org.dcm4che3.data.Tag.TransferSyntaxUID);
                     if (transferSyntaxUID != null) {
+                        this.transferSyntaxUID = transferSyntaxUID;
                         logger.debug("Transfer Syntax UID: {}", transferSyntaxUID);
                         // JPEG圧縮のTransfer Syntax UIDを確認
                         if (transferSyntaxUID.equals("1.2.840.10008.1.2.4.50") ||  // JPEG Baseline
@@ -218,9 +247,173 @@ public class DicomPix {
                             logger.info("JPEG compressed DICOM image detected (Transfer Syntax: {})", transferSyntaxUID);
                         }
                     }
-                    dis.close();
+                    
+                    // HOROS-20240407準拠: DCMPix.m 3655行目 - modalityString
+                    // Modality (0008,0060)を読み込む
+                    String modality = attrs.getString(org.dcm4che3.data.Tag.Modality);
+                    if (modality != null) {
+                        this.modality = modality;
+                        logger.debug("Modality: {}", modality);
+                    }
+                    
+                    // HOROS-20240407準拠: Pixel Spacingを読み込む
+                    // DCMPix.m 5655-5682行目 - pixelSpacingX, pixelSpacingYの読み込み処理
+                    // HOROS-20240407準拠: DCMPix.m 5655行目 - if( pixelSpacingFromUltrasoundRegions == NO)
+                    if (!pixelSpacingFromUltrasoundRegions) {
+                        double[] pixelSpacing = attrs.getDoubles(org.dcm4che3.data.Tag.PixelSpacing);
+                        if (pixelSpacing != null && pixelSpacing.length >= 2) {
+                            this.pixelSpacingY = pixelSpacing[0]; // DICOMでは行間隔（Row Spacing）が最初
+                            this.pixelSpacingX = pixelSpacing[1]; // 列間隔（Column Spacing）が2番目
+                            logger.debug("Pixel Spacing: X={}, Y={}", pixelSpacingX, pixelSpacingY);
+                        } else if (pixelSpacing != null && pixelSpacing.length >= 1) {
+                            // HOROS-20240407準拠: DCMPix.m 5663-5667行目
+                            this.pixelSpacingY = pixelSpacing[0];
+                            this.pixelSpacingX = pixelSpacing[0];
+                            logger.debug("Pixel Spacing (single value): X={}, Y={}", pixelSpacingX, pixelSpacingY);
+                        } else {
+                            // Pixel Spacingが存在しない場合は、Imager Pixel Spacingを試す
+                            double[] imagerPixelSpacing = attrs.getDoubles(org.dcm4che3.data.Tag.ImagerPixelSpacing);
+                            if (imagerPixelSpacing != null && imagerPixelSpacing.length >= 2) {
+                                this.pixelSpacingY = imagerPixelSpacing[0];
+                                this.pixelSpacingX = imagerPixelSpacing[1];
+                                logger.debug("Imager Pixel Spacing: X={}, Y={}", pixelSpacingX, pixelSpacingY);
+                            } else if (imagerPixelSpacing != null && imagerPixelSpacing.length >= 1) {
+                                // HOROS-20240407準拠: DCMPix.m 5676-5680行目
+                                this.pixelSpacingY = imagerPixelSpacing[0];
+                                this.pixelSpacingX = imagerPixelSpacing[0];
+                                logger.debug("Imager Pixel Spacing (single value): X={}, Y={}", pixelSpacingX, pixelSpacingY);
+                            }
+                            
+                            // HOROS-20240407準拠: CR画像の場合、DetectorElementSpacingからpixelSpacingを計算
+                            // PixelSpacingとImagerPixelSpacingが存在しない場合、DetectorElementSpacingを試す
+                            // DICOM規格: DetectorElementSpacing (0018,7020) = 0x00187020
+                            if (pixelSpacingX == 0.0 || pixelSpacingY == 0.0) {
+                                double[] detectorElementSpacing = attrs.getDoubles(0x00187020); // DetectorElementSpacing (0018,7020)
+                                if (detectorElementSpacing != null && detectorElementSpacing.length >= 2) {
+                                    this.pixelSpacingY = detectorElementSpacing[0];
+                                    this.pixelSpacingX = detectorElementSpacing[1];
+                                    logger.debug("Detector Element Spacing: X={}, Y={}", pixelSpacingX, pixelSpacingY);
+                                } else if (detectorElementSpacing != null && detectorElementSpacing.length >= 1) {
+                                    this.pixelSpacingY = detectorElementSpacing[0];
+                                    this.pixelSpacingX = detectorElementSpacing[0];
+                                    logger.debug("Detector Element Spacing (single value): X={}, Y={}", pixelSpacingX, pixelSpacingY);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // HOROS-20240407準拠: DCMPix.m 5684-5765行目 - SequenceOfUltrasoundRegionsからpixelSpacingを計算
+                    // US画像の場合、PhysicalDeltaXとPhysicalDeltaYからpixelSpacingXとpixelSpacingYを計算
+                    org.dcm4che3.data.Sequence seq = attrs.getSequence(org.dcm4che3.data.Tag.SequenceOfUltrasoundRegions);
+                    if (seq != null && !seq.isEmpty()) {
+                        // HOROS-20240407準拠: DCMPix.m 5748-5756行目
+                        // 最初の有効なUS RegionからPhysicalDeltaXとPhysicalDeltaYを取得
+                        for (org.dcm4che3.data.Attributes seqItem : seq) {
+                            int physicalUnitsX = seqItem.getInt(org.dcm4che3.data.Tag.PhysicalUnitsXDirection, 0);
+                            int physicalUnitsY = seqItem.getInt(org.dcm4che3.data.Tag.PhysicalUnitsYDirection, 0);
+                            int regionSpatialFormat = seqItem.getInt(org.dcm4che3.data.Tag.RegionSpatialFormat, 0);
+                            
+                            // HOROS-20240407準拠: DCMPix.m 5748行目
+                            // physicalUnitsX == 3 (cm), physicalUnitsY == 3 (cm), regionSpatialFormat == 1 (2D)
+                            if (physicalUnitsX == 3 && physicalUnitsY == 3 && regionSpatialFormat == 1) {
+                                double physicalDeltaX = seqItem.getDouble(org.dcm4che3.data.Tag.PhysicalDeltaX, 0.0);
+                                double physicalDeltaY = seqItem.getDouble(org.dcm4che3.data.Tag.PhysicalDeltaY, 0.0);
+                                
+                                if (physicalDeltaX != 0.0 && physicalDeltaY != 0.0) {
+                                    // HOROS-20240407準拠: DCMPix.m 5752-5753行目
+                                    // These are in cm, so multiply by 10 to convert to mm
+                                    this.pixelSpacingX = Math.abs(physicalDeltaX) * 10.0;
+                                    this.pixelSpacingY = Math.abs(physicalDeltaY) * 10.0;
+                                    this.pixelSpacingFromUltrasoundRegions = true; // HOROS-20240407準拠: DCMPix.m 5754行目
+                                    logger.debug("Pixel Spacing from Ultrasound Regions: X={}, Y={}", pixelSpacingX, pixelSpacingY);
+                                    break; // 最初の有効なUS Regionを使用
+                                }
+                            }
+                        }
+                    }
+                    
+                    // HOROS-20240407準拠: Pixel Aspect Ratioを読み込む
+                    // DCMPix.m 5767-5786行目 - pixelRatioの計算
+                    // HOROS-20240407準拠: DCMPix.m 5768行目 - if( pixelSpacingFromUltrasoundRegions == NO)
+                    if (!pixelSpacingFromUltrasoundRegions) {
+                        // HOROS-20240407準拠: DCMPix.m 5770-5781行目 - PixelAspectRatioタグから読み込む
+                        double[] pixelAspectRatio = attrs.getDoubles(org.dcm4che3.data.Tag.PixelAspectRatio);
+                        if (pixelAspectRatio != null && pixelAspectRatio.length >= 2) {
+                            double ratiox = pixelAspectRatio[0];
+                            double ratioy = pixelAspectRatio[1];
+                            if (ratioy != 0.0) {
+                                this.pixelRatio = ratiox / ratioy;
+                                logger.debug("Pixel Ratio from PixelAspectRatio: {}", pixelRatio);
+                            }
+                        } else if (pixelSpacingX != pixelSpacingY) {
+                            // HOROS-20240407準拠: DCMPix.m 5782-5785行目
+                            if (pixelSpacingY != 0.0 && pixelSpacingX != 0.0) {
+                                this.pixelRatio = pixelSpacingY / pixelSpacingX;
+                                logger.debug("Pixel Ratio from PixelSpacing: {}", pixelRatio);
+                            }
+                        }
+                    }
+                    // pixelSpacingFromUltrasoundRegions == YESの場合は、pixelRatioは既に計算されている（またはデフォルト値）
+                    if (pixelRatio == 1.0 && pixelSpacingX != 0.0 && pixelSpacingY != 0.0) {
+                        this.pixelRatio = pixelSpacingY / pixelSpacingX;
+                        logger.debug("Pixel Ratio (fallback): {}", pixelRatio);
+                    }
+                    
+                    // HOROS-20240407準拠: DCMPix.m 6866-6869行目 - EstimatedRadiographicMagnificationFactorでpixelSpacingを補正
+                    // CR画像の場合、EstimatedRadiographicMagnificationFactorが設定されている場合、pixelSpacingを補正
+                    double estimatedRadiographicMagnificationFactor = attrs.getDouble(org.dcm4che3.data.Tag.EstimatedRadiographicMagnificationFactor, 0.0);
+                    if (estimatedRadiographicMagnificationFactor > 0.0 && pixelSpacingX != 0.0 && pixelSpacingY != 0.0) {
+                        // HOROS-20240407準拠: DCMPix.m 6868-6869行目
+                        pixelSpacingX /= estimatedRadiographicMagnificationFactor;
+                        pixelSpacingY /= estimatedRadiographicMagnificationFactor;
+                        logger.debug("Pixel Spacing corrected by EstimatedRadiographicMagnificationFactor ({}): X={}, Y={}", 
+                                estimatedRadiographicMagnificationFactor, pixelSpacingX, pixelSpacingY);
+                    }
+                    
+                    // HOROS-20240407準拠: Slice Thicknessを読み込む
+                    // DCMPix.m - sliceThicknessの読み込み処理
+                    double sliceThicknessValue = attrs.getDouble(org.dcm4che3.data.Tag.SliceThickness, 0.0);
+                    if (sliceThicknessValue > 0.0) {
+                        this.sliceThickness = sliceThicknessValue;
+                        logger.debug("Slice Thickness: {}", sliceThickness);
+                    }
+                    
+                    // HOROS-20240407準拠: Slice Locationを読み込む
+                    // DCMPix.m - sliceLocationの読み込み処理
+                    double sliceLocationValue = attrs.getDouble(org.dcm4che3.data.Tag.SliceLocation, 0.0);
+                    if (sliceLocationValue != 0.0) {
+                        this.sliceLocation = sliceLocationValue;
+                        logger.debug("Slice Location: {}", sliceLocation);
+                    }
+                    
+                    // HOROS-20240407準拠: Image Orientation (Patient)を読み込む
+                    // DCMPix.m - orientation[9]の読み込み処理
+                    // Image Orientation (Patient) (0020,0037) - 6つの値（行方向ベクトル3つ、列方向ベクトル3つ）
+                    double[] imageOrientation = attrs.getDoubles(org.dcm4che3.data.Tag.ImageOrientationPatient);
+                    if (imageOrientation != null && imageOrientation.length >= 6) {
+                        // 行方向ベクトル（最初の3つ）
+                        this.orientation[0] = imageOrientation[0];
+                        this.orientation[1] = imageOrientation[1];
+                        this.orientation[2] = imageOrientation[2];
+                        // 列方向ベクトル（次の3つ）
+                        this.orientation[3] = imageOrientation[3];
+                        this.orientation[4] = imageOrientation[4];
+                        this.orientation[5] = imageOrientation[5];
+                        // 法線ベクトル（外積で計算）
+                        this.orientation[6] = this.orientation[1] * this.orientation[5] - this.orientation[2] * this.orientation[4];
+                        this.orientation[7] = this.orientation[2] * this.orientation[3] - this.orientation[0] * this.orientation[5];
+                        this.orientation[8] = this.orientation[0] * this.orientation[4] - this.orientation[1] * this.orientation[3];
+                        logger.debug("Image Orientation: [{}, {}, {}, {}, {}, {}]", 
+                            orientation[0], orientation[1], orientation[2], 
+                            orientation[3], orientation[4], orientation[5]);
+                    } else {
+                        // デフォルト値（単位行列）
+                        this.orientation[0] = 1.0; this.orientation[1] = 0.0; this.orientation[2] = 0.0;
+                        this.orientation[3] = 0.0; this.orientation[4] = 1.0; this.orientation[5] = 0.0;
+                        this.orientation[6] = 0.0; this.orientation[7] = 0.0; this.orientation[8] = 1.0;
+                    }
                 } catch (Exception e) {
-                    logger.debug("Could not read Transfer Syntax UID: {}", e.getMessage());
+                    logger.debug("Could not read DICOM attributes: {}", e.getMessage());
                 }
                 
                 // DICOMフォーマット名でImageReaderを取得
@@ -489,6 +682,39 @@ public class DicomPix {
     }
     
     /**
+     * 指定座標のピクセル値を取得
+     * HOROS-20240407準拠: DCMPix.m 9191-9258行目 - (float) getPixelValueX: (long) x Y:(long) y
+     */
+    public float getPixelValueX(int x, int y) {
+        float val = 0.0f;
+        
+        // HOROS-20240407準拠: DCMPix.m 9195-9196行目
+        if (x < 0 || x >= width || y < 0 || y >= height) return 0.0f;
+        
+        BufferedImage img = getBufferedImage();
+        if (img == null) return 0.0f;
+        
+        try {
+            // HOROS-20240407準拠: DCMPix.m 9248-9254行目
+            // if( isRGB == NO) val = fImage[ x + (y * width)];
+            // else { unsigned char *rgbPtr = (unsigned char*) (&fImage[ x + (y * width)]); val = (rgbPtr[ 1] + rgbPtr[ 2] + rgbPtr[ 3])/3.; }
+            int rgb = img.getRGB(x, y);
+            
+            // RGBから輝度値を計算（R, G, Bの平均）
+            int r = (rgb >> 16) & 0xFF;
+            int g = (rgb >> 8) & 0xFF;
+            int b = rgb & 0xFF;
+            
+            val = (r + g + b) / 3.0f;
+        } catch (Exception e) {
+            logger.error("getPixelValueX: Error getting pixel value at ({}, {}): {}", x, y, e.getMessage());
+            val = 0.0f;
+        }
+        
+        return val;
+    }
+    
+    /**
      * サムネイル画像を取得
      */
     public BufferedImage getThumbnailImage() {
@@ -516,6 +742,81 @@ public class DicomPix {
      * 画像の高さを取得
      */
     public int getHeight() {
+        return height;
+    }
+    
+    // HOROS-20240407準拠: DCMPix.h 263行目 - pixelSpacingX, pixelSpacingY
+    public double getPixelSpacingX() {
+        return pixelSpacingX;
+    }
+    
+    public void setPixelSpacingX(double pixelSpacingX) {
+        this.pixelSpacingX = pixelSpacingX;
+    }
+    
+    public double getPixelSpacingY() {
+        return pixelSpacingY;
+    }
+    
+    public void setPixelSpacingY(double pixelSpacingY) {
+        this.pixelSpacingY = pixelSpacingY;
+    }
+    
+    // HOROS-20240407準拠: DCMPix.h 260行目 - pixelRatio
+    public double getPixelRatio() {
+        return pixelRatio;
+    }
+    
+    public void setPixelRatio(double pixelRatio) {
+        this.pixelRatio = pixelRatio;
+    }
+    
+    /**
+     * Slice Thicknessを取得
+     * HOROS-20240407準拠: DCMPix.h 283行目 - @property double sliceThickness;
+     */
+    public double getSliceThickness() {
+        return sliceThickness;
+    }
+    
+    /**
+     * Slice Locationを取得
+     * HOROS-20240407準拠: DCMPix.h 281行目 - @property double sliceLocation;
+     */
+    public double getSliceLocation() {
+        return sliceLocation;
+    }
+    
+    /**
+     * Image Orientationを取得
+     * HOROS-20240407準拠: DCMPix.h 93行目 - double orientation[9];
+     */
+    public double[] getOrientation() {
+        return orientation.clone(); // コピーを返す
+    }
+    
+    /**
+     * Transfer Syntax UIDを取得
+     * HOROS-20240407準拠: Transfer Syntax UID (0002,0010)
+     */
+    public String getTransferSyntaxUID() {
+        return transferSyntaxUID;
+    }
+    
+    /**
+     * Modalityを取得
+     * HOROS-20240407準拠: DCMPix.m 3655行目 - modalityString
+     */
+    public String getModality() {
+        return modality;
+    }
+    
+    // HOROS-20240407準拠: DCMPix.h - pwidth, pheight
+    public int getPwidth() {
+        return width;
+    }
+    
+    public int getPheight() {
         return height;
     }
     

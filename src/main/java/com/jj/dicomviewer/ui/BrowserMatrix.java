@@ -22,6 +22,8 @@ import java.awt.dnd.DragSourceListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +34,7 @@ import java.util.List;
  * HOROS-20240407のBrowserMatrixをJava Swingに移植
  * NSMatrixの代わりにJPanelとGridLayoutを使用
  */
-public class BrowserMatrix extends JPanel implements DragGestureListener, DragSourceListener {
+public class BrowserMatrix extends JPanel implements DragGestureListener, DragSourceListener, KeyListener {
     
     private boolean avoidRecursive = false;
     private BrowserController browserController;
@@ -258,8 +260,13 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
                 // HOROS-20240407準拠: セルを選択してハイライト
                 selectCellWithTag(cellIndex);
                 // HOROS-20240407準拠: matrixPressedを呼び出す
+                // 注: selectCellWithTagを呼び出した後、selectedCell()が正しく動作するようにする
+                System.out.println("[DEBUG] BrowserMatrix.addActionListener() - cellIndex: " + cellIndex + ", cell: " + cell);
                 if (browserController != null) {
-                    browserController.matrixPressed(this);
+                    // 少し遅延させてからmatrixPressedを呼び出す（selectedCell()が正しく動作するように）
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        browserController.matrixPressed(this);
+                    });
                 }
             });
             
@@ -339,13 +346,18 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
     
     /**
      * 選択されたセルを取得
+     * HOROS-20240407準拠: - (id) selectedCell
      */
     public JButton selectedCell() {
         for (JButton cell : cells) {
-            if (cell.isSelected() && cell.isVisible()) {
+            // HOROS-20240407準拠: selectCellWithTag()でsetOpaque(true)とsetBackground()を設定しているため、
+            // isOpaque()とgetBackground()をチェックする
+            if (cell.isVisible() && cell.isOpaque() && cell.getBackground() != null) {
+                System.out.println("[DEBUG] BrowserMatrix.selectedCell() - found selected cell: " + cell + ", tag: " + cell.getClientProperty("tag"));
                 return cell;
             }
         }
+        System.out.println("[DEBUG] BrowserMatrix.selectedCell() - no selected cell found");
         return null;
     }
     
@@ -383,6 +395,21 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
             cell.setOpaque(true);
             cell.setBackground(new java.awt.Color(0.7f, 0.8f, 1.0f)); // 薄い青でハイライト
             cell.repaint();
+            
+            // HOROS-20240407準拠: 選択されたセルが表示されるようにスクロール
+            // Java Swingでは、JComponentのscrollRectToVisibleメソッドを使用
+            // レイアウトが完了した後にスクロールするため、SwingUtilities.invokeLaterを使用
+            javax.swing.SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    if (cell.isVisible() && cell.getParent() == BrowserMatrix.this) {
+                        java.awt.Rectangle cellBounds = cell.getBounds();
+                        // scrollRectToVisibleは、このコンポーネント（BrowserMatrix）の座標系での矩形を受け取る
+                        // 親のJScrollPaneが自動的にスクロールして、指定された矩形が表示されるようになる
+                        scrollRectToVisible(cellBounds);
+                    }
+                }
+            });
         }
     }
     
@@ -398,6 +425,81 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
             cell.setBackground(null);
             cell.repaint();
         }
+    }
+    
+    /**
+     * キーリスナーを設定
+     * HOROS-20240407準拠: 左右の矢印キーで画像を遷移
+     */
+    public void setupKeyListener() {
+        setFocusable(true);
+        addKeyListener(this);
+    }
+    
+    /**
+     * キーが押されたときの処理
+     * HOROS-20240407準拠: 左右の矢印キーで画像を遷移
+     */
+    @Override
+    public void keyPressed(KeyEvent e) {
+        JButton selectedCell = selectedCell();
+        if (selectedCell == null) {
+            // 選択されたセルがない場合、最初の有効なセルを選択
+            for (JButton cell : cells) {
+                if (cell.isEnabled() && cell.isVisible()) {
+                    Object tagObj = cell.getClientProperty("tag");
+                    if (tagObj instanceof Integer) {
+                        int tag = (Integer) tagObj;
+                        selectCellWithTag(tag);
+                        if (browserController != null) {
+                            browserController.matrixPressed(this);
+                        }
+                    }
+                    return;
+                }
+            }
+            return;
+        }
+        
+        Object tagObj = selectedCell.getClientProperty("tag");
+        if (!(tagObj instanceof Integer)) {
+            return;
+        }
+        
+        int currentTag = (Integer) tagObj;
+        int newTag = -1;
+        
+        // HOROS-20240407準拠: 左右の矢印キーで画像を遷移
+        if (e.getKeyCode() == KeyEvent.VK_LEFT) {
+            // 左矢印: 前の画像へ
+            newTag = currentTag - 1;
+        } else if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
+            // 右矢印: 次の画像へ
+            newTag = currentTag + 1;
+        } else {
+            return; // 他のキーは無視
+        }
+        
+        // 有効な範囲内かチェック
+        if (newTag >= 0 && newTag < cells.size()) {
+            JButton newCell = cells.get(newTag);
+            if (newCell.isEnabled() && newCell.isVisible()) {
+                selectCellWithTag(newTag);
+                if (browserController != null) {
+                    browserController.matrixPressed(this);
+                }
+            }
+        }
+    }
+    
+    @Override
+    public void keyReleased(KeyEvent e) {
+        // 何もしない
+    }
+    
+    @Override
+    public void keyTyped(KeyEvent e) {
+        // 何もしない
     }
     
     /**
