@@ -2612,7 +2612,44 @@ public class BrowserController extends JFrame {
      * (BrowserController.m)
      */
     public void databaseDoublePressed(DatabaseOutlineView sender) {
-        // TODO: 実装
+        // HOROS-20240407準拠: BrowserController.m 7906行目
+        // if( [sender clickedRow] != -1)
+        int clickedRow = sender.getSelectedRow();
+        if (clickedRow != -1) {
+            // HOROS-20240407準拠: BrowserController.m 7908-7912行目
+            // id item;
+            // if ([databaseOutline clickedRow] != -1)
+            //     item = [databaseOutline itemAtRow:[databaseOutline clickedRow]];
+            // else
+            //     item = [databaseOutline itemAtRow:[databaseOutline selectedRow]];
+            Object item = sender.getSelectedItem();
+            
+            if (item != null) {
+                // HOROS-20240407準拠: BrowserController.m 7914行目
+                // if ([[item numberOfImages] intValue] != 0)
+                int numberOfImages = getItemFileCount(item);
+                if (numberOfImages != 0) {
+                    // HOROS-20240407準拠: BrowserController.m 7916-7930行目
+                    // OSIRIX_LIGHTのチェックはスキップ（Java実装では不要）
+                    // if( [item isDistant])
+                    // {
+                    //     // Check to see if already in retrieving mode, if not download it
+                    //     [self retrieveComparativeStudy: study select: YES open: NO];
+                    // }
+                    // else
+                    // {
+                    //     [self databaseOpenStudy: item];
+                    // }
+                    databaseOpenStudy(item);
+                } else {
+                    // HOROS-20240407準拠: BrowserController.m 7933-7937行目
+                    // #ifndef OSIRIX_LIGHT
+                    // [self querySelectedStudy:self];
+                    // #endif
+                    // TODO: querySelectedStudyの実装（OSIRIX_LIGHT版では不要）
+                }
+            }
+        }
     }
     
     /**
@@ -3207,13 +3244,20 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) matrixDoublePressed:(id)sender (9381行目)
      */
     public void matrixDoublePressed(BrowserMatrix sender) {
-        javax.swing.JButton selectedCell = sender.selectedCell();
-        if (selectedCell != null) {
-            Object tagObj = selectedCell.getClientProperty("tag");
+        // HOROS-20240407準拠: BrowserController.m 9383行目
+        // id  theCell = [oMatrix selectedCell];
+        javax.swing.JButton theCell = sender.selectedCell();
+        
+        // HOROS-20240407準拠: BrowserController.m 9385-9387行目
+        // if( [theCell tag] >= 0)
+        // {
+        //     [self viewerDICOM: [[oMatrix menu] itemAtIndex:0]];
+        // }
+        if (theCell != null) {
+            Object tagObj = theCell.getClientProperty("tag");
             if (tagObj instanceof Integer && (Integer) tagObj >= 0) {
-                // HOROS-20240407準拠: [self viewerDICOM: [[oMatrix menu] itemAtIndex:0]];
-                // TODO: viewerDICOMメソッドの実装
-                databaseOpenStudy(databaseOutline.getSelectedItem());
+                // HOROS-20240407準拠: viewerDICOMを呼び出す（menuのitemAtIndex:0はnullで呼び出す）
+                viewerDICOM(null);
             }
         }
     }
@@ -5213,13 +5257,511 @@ public class BrowserController extends JFrame {
     }
     
     /**
+     * データベース選択項目を取得
+     * HOROS-20240407準拠: - (NSArray *) databaseSelection (20654行目)
+     */
+    private List<Object> databaseSelection() {
+        // HOROS-20240407準拠: BrowserController.m 20654-20667行目
+        List<Object> selectedItems = new ArrayList<>();
+        
+        if (databaseOutline != null) {
+            int[] selectedRows = databaseOutline.getSelectedRows();
+            for (int index : selectedRows) {
+                javax.swing.tree.TreePath path = databaseOutline.getPathForRow(index);
+                if (path != null) {
+                    Object item = path.getLastPathComponent();
+                    if (item != null) {
+                        selectedItems.add(item);
+                    }
+                }
+            }
+        }
+        
+        return selectedItems;
+    }
+    
+    /**
      * データベーススタディを開く
-     * HOROS-20240407準拠: - (void) databaseOpenStudy: (NSManagedObject*) item
-     * (7505行目)
+     * HOROS-20240407準拠: - (void) databaseOpenStudy: (NSManagedObject*) item (7505行目)
      */
     private void databaseOpenStudy(Object item) {
-        // HOROS-20240407準拠: スタディを開く処理の実装
-        // TODO: ViewerControllerの実装が必要
+        if (item == null) {
+            return;
+        }
+        
+        // HOROS-20240407準拠: BrowserController.m 7517-7524行目
+        // NSArray *cells = [oMatrix selectedCells];
+        // if( [cells count] > 1)
+        // {
+        //     for( NSCell *c in oMatrix.cells)
+        //         [c setHighlighted: NO];
+        //     [oMatrix selectCell: [cells objectAtIndex: 0]];
+        // }
+        if (oMatrix != null) {
+            List<javax.swing.JButton> selectedCells = oMatrix.selectedCells();
+            if (selectedCells.size() > 1) {
+                // TODO: すべてのセルを取得して選択を解除する処理
+                // 現在は基本的な実装のみ
+                if (!selectedCells.isEmpty()) {
+                    oMatrix.selectCell(selectedCells.get(0));
+                }
+            }
+        }
+        
+        // HOROS-20240407準拠: BrowserController.m 7526-7534行目
+        // if ([[item valueForKey:@"type"] isEqualToString:@"Series"])
+        // {
+        //     if( [self isUsingExternalViewer: item] == NO)
+        //     {
+        //         // DICOM & others
+        //         [self viewerDICOMInt :NO  dcmFile: [NSArray arrayWithObject:item] viewer:nil];
+        //     }
+        // }
+        String itemType = getItemType(item);
+        if ("Series".equals(itemType)) {
+            // TODO: isUsingExternalViewerの実装（現在は常にfalse）
+            // if (!isUsingExternalViewer(item)) {
+                viewerDICOMInt(false, java.util.Arrays.asList(item), null);
+            // }
+        } else {
+            // HOROS-20240407準拠: BrowserController.m 7535行目以降
+            // STUDY - Hanging Protocols - Windows State
+            // TODO: Studyの場合は複雑な処理（Hanging Protocols、Windows Stateなど）が必要
+            // 現在は基本的な実装のみ
+            viewerDICOMInt(false, java.util.Arrays.asList(item), null);
+        }
+    }
+    
+    /**
+     * ビューワーを開く
+     * HOROS-20240407準拠: - (void) viewerDICOM: (id)sender (13372行目)
+     */
+    private void viewerDICOM(Object sender) {
+        // HOROS-20240407準拠: BrowserController.m 13374-13382行目
+        // if ([[[NSApplication sharedApplication] currentEvent] modifierFlags]  & NSShiftKeyMask)
+        //     [self viewerDICOMMergeSelection: sender];
+        // else
+        // {
+        //     if( [[self window] firstResponder] == databaseOutline)
+        //         [self newViewerDICOM: nil];
+        //     else
+        //         [self newViewerDICOM: sender];
+        // }
+        // TODO: Shiftキーのチェック（現在はスキップ）
+        // if (isShiftKeyPressed()) {
+        //     viewerDICOMMergeSelection(sender);
+        //     return;
+        // }
+        
+        // HOROS-20240407準拠: firstResponderのチェック
+        java.awt.Component focusOwner = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        if (focusOwner == databaseOutline) {
+            newViewerDICOM(null);
+        } else {
+            newViewerDICOM(sender);
+        }
+    }
+    
+    /**
+     * 新しいビューワーを開く
+     * HOROS-20240407準拠: - (void)newViewerDICOM: (id)sender (13388行目)
+     */
+    private void newViewerDICOM(Object sender) {
+        if (database == null) {
+            return;
+        }
+        
+        // HOROS-20240407準拠: BrowserController.m 13392行目
+        // NSManagedObject *item = [databaseOutline itemAtRow: [databaseOutline selectedRow]];
+        Object item = databaseOutline != null ? databaseOutline.getSelectedItem() : null;
+        
+        try {
+            // HOROS-20240407準拠: BrowserController.m 13396-13413行目
+            // if (sender == Nil &&
+            //     [[oMatrix selectedCells] count] == 1 &&
+            //     [[item valueForKey:@"type"] isEqualToString:@"Study"])
+            // {
+            //     NSArray *array = [self databaseSelection];
+            //     // ... 複数のスタディを開く処理
+            // }
+            if (sender == null && oMatrix != null && item != null) {
+                List<javax.swing.JButton> selectedCells = oMatrix.selectedCells();
+                if (selectedCells.size() == 1 && "Study".equals(getItemType(item))) {
+                    List<Object> array = databaseSelection();
+                    // TODO: automaticWorkspaceLoadの処理
+                    for (Object obj : array) {
+                        // TODO: getRowForItemとsetSelectionRowの実装
+                        databaseOpenStudy(obj);
+                    }
+                    return;
+                }
+            }
+            
+            // HOROS-20240407準拠: BrowserController.m 13414-13424行目
+            // else
+            // {
+            //     if( [matrixViewArray count] > [[oMatrix selectedCell] tag] && [self isUsingExternalViewer: [matrixViewArray objectAtIndex: [[oMatrix selectedCell] tag]]] == NO)
+            //     {
+            //         dontUpdatePreviewPane = YES;
+            //         [self viewerDICOMInt: NO dcmFile: [self databaseSelection] viewer: nil];
+            //         dontUpdatePreviewPane = NO;
+            //         [self previewSliderAction: nil];
+            //     }
+            // }
+            if (oMatrix != null && matrixViewArray != null) {
+                javax.swing.JButton selectedCell = oMatrix.selectedCell();
+                if (selectedCell != null) {
+                    Object tagObj = selectedCell.getClientProperty("tag");
+                    if (tagObj instanceof Integer) {
+                        int cellTag = (Integer) tagObj;
+                        if (cellTag >= 0 && cellTag < matrixViewArray.size()) {
+                            // TODO: isUsingExternalViewerの実装（現在は常にfalse）
+                            // if (!isUsingExternalViewer(matrixViewArray.get(cellTag))) {
+                                dontUpdatePreviewPane = true;
+                                viewerDICOMInt(false, databaseSelection(), null);
+                                dontUpdatePreviewPane = false;
+                                previewSliderAction(null);
+                            // }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * ビューワーを開く（内部処理）
+     * HOROS-20240407準拠: - (void) viewerDICOMInt:(BOOL) movieViewer dcmFile:(NSArray *)selectedLines viewer:(ViewerController*) viewer tileWindows: (BOOL) tileWindows protocol: (NSDictionary*) protocol (13205行目)
+     */
+    private void viewerDICOMInt(boolean movieViewer, List<Object> selectedLines, ViewerController viewer) {
+        viewerDICOMInt(movieViewer, selectedLines, viewer, true, null);
+    }
+    
+    /**
+     * ビューワーを開く（内部処理）
+     * HOROS-20240407準拠: - (void) viewerDICOMInt:(BOOL) movieViewer dcmFile:(NSArray *)selectedLines viewer:(ViewerController*) viewer tileWindows: (BOOL) tileWindows protocol: (NSDictionary*) protocol (13205行目)
+     */
+    private void viewerDICOMInt(boolean movieViewer, List<Object> selectedLines, ViewerController viewer, boolean tileWindows, Object protocol) {
+        // HOROS-20240407準拠: BrowserController.m 13207行目
+        // if( [selectedLines count] == 0) return;
+        if (selectedLines == null || selectedLines.isEmpty()) {
+            return;
+        }
+        
+        if (database == null) {
+            return;
+        }
+        
+        try {
+            // HOROS-20240407準拠: BrowserController.m 13213行目
+            // NSManagedObject *selectedLine = [selectedLines objectAtIndex: 0];
+            Object selectedLine = selectedLines.get(0);
+            
+            // HOROS-20240407準拠: BrowserController.m 13218-13223行目
+            // NSArray *cells = [oMatrix selectedCells];
+            // if( [cells count] == 0 && [[oMatrix cells] count] > 0)
+            // {
+            //     cells = [NSArray arrayWithObject: [[oMatrix cells] objectAtIndex: 0]];
+            // }
+            List<javax.swing.JButton> cells = oMatrix != null ? oMatrix.selectedCells() : new ArrayList<>();
+            // TODO: getAllCellsの実装（現在は基本的な実装のみ）
+            if (cells.isEmpty() && oMatrix != null) {
+                javax.swing.JButton firstCell = oMatrix.selectedCell();
+                if (firstCell != null) {
+                    cells = java.util.Arrays.asList(firstCell);
+                }
+            }
+            
+            // HOROS-20240407準拠: BrowserController.m 13225-13228行目
+            // if( [[selectedLine valueForKey:@"type"] isEqualToString: @"Series"])
+            //     [[AppController sharedAppController] addStudyToRecentStudiesMenu: [[selectedLine valueForKey: @"study"] objectID]];
+            // else
+            //     [[AppController sharedAppController] addStudyToRecentStudiesMenu: selectedLine.objectID];
+            // TODO: addStudyToRecentStudiesMenuの実装
+            
+            // HOROS-20240407準拠: BrowserController.m 13234-13252行目
+            // 選択された画像のみを開く処理
+            String selectedLineType = getItemType(selectedLine);
+            if (cells.size() > 1 && "Series".equals(selectedLineType)) {
+                List<Object> curList = childrenArray(selectedLine, false);
+                List<Object> selectedFilesList = new ArrayList<>();
+                
+                for (javax.swing.JButton c : cells) {
+                    Object tagObj = c.getClientProperty("tag");
+                    if (tagObj instanceof Integer) {
+                        int tag = (Integer) tagObj;
+                        if (tag >= 0 && tag < curList.size()) {
+                            selectedFilesList.add(curList.get(tag));
+                        }
+                    }
+                }
+                
+                openViewerFromImages(java.util.Arrays.asList(selectedFilesList), movieViewer, viewer, false);
+            } else {
+                // HOROS-20240407準拠: BrowserController.m 13254-13319行目
+                // シリーズを開く処理
+                List<List<Object>> toOpenArray = new ArrayList<>();
+                
+                if (cells.size() == 1 && selectedLines.size() > 1) {
+                    // 1つのサムネイルが選択され、複数の行が選択されている場合
+                    for (Object curFile : selectedLines) {
+                        List<Object> loadList = null;
+                        
+                        if ("Study".equals(getItemType(curFile))) {
+                            // TODO: 最初の画像シリーズを見つける処理
+                            // 現在は基本的な実装のみ
+                        } else if ("Series".equals(getItemType(curFile))) {
+                            loadList = childrenArray(curFile, true);
+                        }
+                        
+                        if (loadList != null && !loadList.isEmpty()) {
+                            toOpenArray.add(loadList);
+                        }
+                    }
+                } else {
+                    // 複数のサムネイルが選択されている場合
+                    for (javax.swing.JButton cell : cells) {
+                        Object tagObj = cell.getClientProperty("tag");
+                        if (tagObj instanceof Integer) {
+                            int tag = (Integer) tagObj;
+                            if (matrixViewArray != null && tag >= 0 && tag < matrixViewArray.size()) {
+                                Object curFile = matrixViewArray.get(tag);
+                                List<Object> loadList = null;
+                                
+                                if ("Image".equals(getItemType(curFile))) {
+                                    loadList = childrenArray(selectedLine, true);
+                                } else if ("Series".equals(getItemType(curFile))) {
+                                    loadList = childrenArray(curFile, true);
+                                }
+                                
+                                if (loadList != null && !loadList.isEmpty()) {
+                                    toOpenArray.add(loadList);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                processOpenViewerDICOMFromArray(toOpenArray, movieViewer, viewer);
+            }
+            
+            // HOROS-20240407準拠: BrowserController.m 13222-13346行目
+            // tileWindowsの処理
+            if (tileWindows) {
+                // TODO: AUTOTILINGの処理
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * ビューワーを開く（配列から）
+     * HOROS-20240407準拠: - (void) processOpenViewerDICOMFromArray:(NSArray*) toOpenArray movie:(BOOL) movieViewer viewer: (ViewerController*) viewer (12587行目)
+     */
+    private void processOpenViewerDICOMFromArray(List<List<Object>> toOpenArray, boolean movieViewer, ViewerController viewer) {
+        // HOROS-20240407準拠: BrowserController.m 12587行目以降
+        // TODO: 実装
+        for (List<Object> loadList : toOpenArray) {
+            openViewerFromImages(java.util.Arrays.asList(loadList), movieViewer, viewer, false);
+        }
+    }
+    
+    /**
+     * ビューワーを開く（画像から）
+     * HOROS-20240407準拠: - (ViewerController*) openViewerFromImages:(NSArray*) toOpenArray movie:(BOOL) movieViewer viewer:(ViewerController*) viewer keyImagesOnly:(BOOL) keyImages tryToFlipData:(BOOL) tryToFlipData (12005行目)
+     */
+    private ViewerController openViewerFromImages(List<List<Object>> toOpenArray, boolean movieViewer, ViewerController viewer, boolean keyImages) {
+        return openViewerFromImages(toOpenArray, movieViewer, viewer, keyImages, false);
+    }
+    
+    /**
+     * ビューワーを開く（画像から）
+     * HOROS-20240407準拠: - (ViewerController*) openViewerFromImages:(NSArray*) toOpenArray movie:(BOOL) movieViewer viewer:(ViewerController*) viewer keyImagesOnly:(BOOL) keyImages tryToFlipData:(BOOL) tryToFlipData (12005行目)
+     */
+    private ViewerController openViewerFromImages(List<List<Object>> toOpenArray, boolean movieViewer, ViewerController viewer, boolean keyImages, boolean tryToFlipData) {
+        // HOROS-20240407準拠: BrowserController.m 12007行目
+        // unsigned long *memBlockSize = calloc( [toOpenArray count], sizeof (unsigned long));
+        if (toOpenArray == null || toOpenArray.isEmpty()) {
+            return null;
+        }
+        
+        // HOROS-20240407準拠: BrowserController.m 12028-12060行目
+        // (1) keyImagesの処理
+        if (keyImages) {
+            List<List<Object>> keyImagesToOpenArray = new ArrayList<>();
+            try {
+                for (List<Object> loadList : toOpenArray) {
+                    List<Object> keyImagesArray = new ArrayList<>();
+                    for (Object image : loadList) {
+                        if (image instanceof com.jj.dicomviewer.model.DicomImage) {
+                            com.jj.dicomviewer.model.DicomImage dicomImage = (com.jj.dicomviewer.model.DicomImage) image;
+                            // TODO: isKeyImageの実装
+                            // if (dicomImage.isKeyImage()) {
+                            //     keyImagesArray.add(image);
+                            // }
+                        }
+                    }
+                    if (!keyImagesArray.isEmpty()) {
+                        keyImagesToOpenArray.add(keyImagesArray);
+                    }
+                }
+                if (!keyImagesToOpenArray.isEmpty()) {
+                    toOpenArray = keyImagesToOpenArray;
+                } else {
+                    // TODO: キー画像がない場合のアラート表示
+                    // 現在はすべての画像を開く
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        
+        // HOROS-20240407準拠: BrowserController.m 12062-12072行目
+        // AUTOHIDEMATRIXの処理（スキップ）
+        // openSubSeriesの処理（スキップ）
+        
+        // HOROS-20240407準拠: BrowserController.m 12074-12084行目
+        // 画像の検証
+        for (List<Object> r : toOpenArray) {
+            if (!r.isEmpty()) {
+                Object lastObj = r.get(r.size() - 1);
+                if (!(lastObj instanceof com.jj.dicomviewer.model.DicomImage)) {
+                    // TODO: アラート表示
+                    return null;
+                }
+            }
+        }
+        
+        // HOROS-20240407準拠: BrowserController.m 12228-12461行目
+        // 画像の読み込みとViewerControllerの作成
+        ViewerController createdViewer = viewer;
+        
+        try {
+            for (List<Object> loadList : toOpenArray) {
+                if (loadList == null || loadList.isEmpty()) {
+                    continue;
+                }
+                
+                // HOROS-20240407準拠: BrowserController.m 12336-12339行目
+                // dateOpenedの更新
+                Object firstFile = loadList.get(0);
+                if (firstFile instanceof com.jj.dicomviewer.model.DicomImage) {
+                    com.jj.dicomviewer.model.DicomImage dicomImage = (com.jj.dicomviewer.model.DicomImage) firstFile;
+                    // TODO: dateOpenedの更新
+                    // dicomImage.getSeries().setDateOpened(new Date());
+                    // dicomImage.getSeries().getStudy().setDateOpened(new Date());
+                }
+                
+                // HOROS-20240407準拠: BrowserController.m 12341-12386行目
+                // DCMPixの作成（簡易実装）
+                List<com.jj.dicomviewer.model.DicomPix> viewerPix = new ArrayList<>();
+                List<Object> correspondingObjects = new ArrayList<>();
+                
+                for (Object curFile : loadList) {
+                    if (curFile instanceof com.jj.dicomviewer.model.DicomImage) {
+                        com.jj.dicomviewer.model.DicomImage dicomImage = (com.jj.dicomviewer.model.DicomImage) curFile;
+                        try {
+                            // HOROS-20240407準拠: DCMPixの作成
+                            // DCMPix* dcmPix = [[DCMPix alloc] initWithPath: [curFile valueForKey:@"completePath"] :i :[loadList count] :fVolumePtr+mem :[[curFile valueForKey:@"frameID"] intValue] :[[curFile valueForKeyPath:@"series.id"] intValue] isBonjour:![_database isLocal] imageObj:curFile];
+                            com.jj.dicomviewer.model.DicomPix dcmPix = new com.jj.dicomviewer.model.DicomPix(
+                                dicomImage,
+                                dicomImage.getFrameID() != null ? dicomImage.getFrameID() : 0,
+                                loadList.size()
+                            );
+                            viewerPix.add(dcmPix);
+                            correspondingObjects.add(curFile);
+                        } catch (Exception e) {
+                            System.err.println("not readable: " + dicomImage.getCompletePath());
+                            e.printStackTrace();
+                        }
+                    }
+                }
+                
+                if (viewerPix.isEmpty()) {
+                    // TODO: アラート表示
+                    continue;
+                }
+                
+                // HOROS-20240407準拠: BrowserController.m 12409-12461行目
+                // ViewerControllerの作成または再利用
+                if (movieViewer) {
+                    // TODO: 4Dビューワーの処理
+                    if (createdViewer == null) {
+                        if (viewer != null) {
+                            // TODO: changeImageDataの実装
+                            createdViewer = viewer;
+                        } else {
+                            // TODO: ViewerControllerの作成
+                            createdViewer = new ViewerController();
+                        }
+                    } else {
+                        // TODO: addMovieSerieの実装
+                    }
+                } else {
+                    if (viewer != null) {
+                        // HOROS-20240407準拠: BrowserController.m 12441-12448行目
+                        // reuse of existing viewer
+                        // TODO: changeImageDataの実装
+                        // viewer.changeImageData(viewerPix, correspondingObjects, null, false);
+                        // viewer.startLoadImageThread();
+                        createdViewer = viewer;
+                    } else {
+                        // HOROS-20240407準拠: BrowserController.m 12450-12459行目
+                        // creation of new viewer
+                        // createdViewer = [[ViewerController alloc] initWithPix:viewerPix[0] withFiles: [NSMutableArray arrayWithArray: correspondingObjects] withVolume:volumeData];
+                        // [createdViewer showWindowTransition];
+                        // [createdViewer startLoadImageThread];
+                        createdViewer = new ViewerController();
+                        // HOROS-20240407準拠: ViewerController.m 7620行目 - initWithPix:withFiles:withVolume:
+                        // viewerPix[0]とcorrespondingObjectsをList<List<Object>>にラップ
+                        List<List<Object>> viewerPixList = new ArrayList<>();
+                        viewerPixList.add(new ArrayList<>(viewerPix));
+                        List<List<Object>> correspondingObjectsList = new ArrayList<>();
+                        correspondingObjectsList.add(new ArrayList<>(correspondingObjects));
+                        createdViewer.initWithPix(viewerPixList, correspondingObjectsList, null);
+                        // HOROS-20240407準拠: ViewerController.m 8760行目 - showWindowTransition
+                        // ウィンドウのサイズと位置を設定（ウィンドウの表示は行わない）
+                        createdViewer.showWindowTransition();
+                        
+                        // HOROS-20240407準拠: ViewerController.m 3019行目
+                        // [[self window] makeKeyAndOrderFront: self];
+                        // ビューワーウィンドウを表示
+                        createdViewer.setVisible(true);
+                        createdViewer.toFront();
+                        
+                        // HOROS-20240407準拠: ViewerController.m 3323-3324行目（windowDidDeminiaturize相当）
+                        // ツールバーウィンドウを表示
+                        Preferences prefs = Preferences.userNodeForPackage(ViewerController.class);
+                        boolean useToolbarPanel = prefs.getBoolean("USETOOLBARPANEL", true);
+                        if (useToolbarPanel && createdViewer.toolbarPanel != null) {
+                            createdViewer.toolbarPanel.applicationDidChangeScreenParameters();
+                            createdViewer.toolbarPanel.setVisible(true);
+                            createdViewer.toolbarPanel.toFront();
+                        }
+                        
+                        // HOROS-20240407準拠: ViewerController.m 3399-3420行目
+                        // サムネイルウィンドウを表示
+                        // ウィンドウが表示された後にwindowDidBecomeMainを呼ぶ
+                        // SwingUtilities.invokeLaterを使用して、ウィンドウが完全に表示された後に呼ぶ
+                        final ViewerController finalViewer = createdViewer;
+                        javax.swing.SwingUtilities.invokeLater(() -> {
+                            finalViewer.windowDidBecomeMain();
+                        });
+                        
+                        // HOROS-20240407準拠: ViewerController.m 8807行目 - startLoadImageThread
+                        createdViewer.startLoadImageThread();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+        
+        return createdViewer;
     }
     
     /**

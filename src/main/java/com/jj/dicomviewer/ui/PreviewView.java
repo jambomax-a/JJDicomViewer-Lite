@@ -33,6 +33,22 @@ public class PreviewView extends DCMView {
                 scrollWheel(e);
             }
         });
+        
+        // HOROS-20240407準拠: DCMView.m 4319-4322行目
+        // if( clickCount == 2 && [self window] == [[BrowserController currentBrowser] window])
+        // {
+        //     [[BrowserController currentBrowser] matrixDoublePressed:nil];
+        // }
+        addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2 && browserController != null) {
+                    // HOROS-20240407準拠: プレビュー画面（BrowserControllerのwindow）でのダブルクリック時に
+                    // matrixDoublePressedを呼び出す
+                    browserController.matrixDoublePressed(null);
+                }
+            }
+        });
     }
     
     /**

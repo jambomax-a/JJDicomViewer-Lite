@@ -423,7 +423,8 @@ public class DicomDatabase {
                     referringPhysician TEXT,
                     performingPhysician TEXT,
                     institutionName TEXT,
-                    studyID TEXT
+                    studyID TEXT,
+                    hidden INTEGER DEFAULT 0
                 )
             """);
             
@@ -493,6 +494,45 @@ public class DicomDatabase {
             """);
             
             logger.info("SQLite tables created successfully");
+            
+            // データベースマイグレーション: hiddenカラムを追加
+            migrateDatabase();
+        }
+    }
+    
+    /**
+     * データベースマイグレーション
+     * 既存のデータベースに新しいカラムを追加
+     */
+    private void migrateDatabase() {
+        try {
+            // hiddenカラムが存在するか確認
+            boolean hasHiddenColumn = false;
+            try {
+                try (ResultSet rs = sqliteConnection.getMetaData().getColumns(null, null, "Study", "hidden")) {
+                    hasHiddenColumn = rs.next();
+                }
+            } catch (SQLException e) {
+                // メタデータ取得に失敗した場合は、ALTER TABLEを試行
+                hasHiddenColumn = false;
+            }
+            
+            if (!hasHiddenColumn) {
+                logger.info("Adding 'hidden' column to Study table");
+                try (Statement stmt = sqliteConnection.createStatement()) {
+                    stmt.execute("ALTER TABLE Study ADD COLUMN hidden INTEGER DEFAULT 0");
+                    logger.info("Successfully added 'hidden' column to Study table");
+                } catch (SQLException e) {
+                    // カラムが既に存在する場合は無視
+                    if (e.getMessage() != null && e.getMessage().contains("duplicate column name")) {
+                        logger.info("'hidden' column already exists in Study table");
+                    } else {
+                        logger.warn("Failed to add 'hidden' column to Study table: " + e.getMessage());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to check/migrate database schema: " + e.getMessage());
         }
     }
     
@@ -684,6 +724,15 @@ public class DicomDatabase {
                 
                 // HOROS-20240407準拠: studyNameを読み込む
                 study.setStudyName(rs.getString("studyName"));
+                
+                // HOROS-20240407準拠: hiddenを読み込む
+                try {
+                    int hiddenValue = rs.getInt("hidden");
+                    study.setHidden(hiddenValue != 0);
+                } catch (SQLException e) {
+                    // hiddenカラムが存在しない場合はデフォルト値（false）を使用
+                    study.setHidden(false);
+                }
                 
                 // HOROS-20240407準拠: dateOfBirthを読み込む（patientBirthDateから）
                 String patientBirthDateStr = rs.getString("patientBirthDate");
@@ -973,8 +1022,8 @@ public class DicomDatabase {
             (studyInstanceUID, name, patientID, patientUID, patientBirthDate, patientSex, 
              studyName, modality, date, dateAdded, 
              numberOfImages, comment, accessionNumber, referringPhysician, 
-             performingPhysician, institutionName, studyID)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             performingPhysician, institutionName, studyID, hidden)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         
         try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -995,6 +1044,7 @@ public class DicomDatabase {
             pstmt.setString(15, study.getPerformingPhysician());
             pstmt.setString(16, study.getInstitutionName());
             pstmt.setString(17, study.getStudyID());
+            pstmt.setInt(18, study.isHidden() ? 1 : 0);
             
             pstmt.executeUpdate();
             
@@ -3302,6 +3352,15 @@ public class DicomDatabase {
                     study.setStudyID(rs.getString("studyID"));
                     study.setStudyName(rs.getString("studyName"));
                     
+                    // HOROS-20240407準拠: hiddenを読み込む
+                    try {
+                        int hiddenValue = rs.getInt("hidden");
+                        study.setHidden(hiddenValue != 0);
+                    } catch (SQLException e) {
+                        // hiddenカラムが存在しない場合はデフォルト値（false）を使用
+                        study.setHidden(false);
+                    }
+                    
                     // DBのIDを保存（遅延読み込み用）
                     study.setId(String.valueOf(studyDbId));
                     
@@ -3337,6 +3396,64 @@ public class DicomDatabase {
     public boolean save(Object error) {
         // TODO: 実装
         return true;
+    }
+    
+    /**
+     * Studyのhidden状態を更新
+     * HOROS-20240407準拠: matrixPreviewSwitchHiddenで使用
+     */
+    public void updateStudyHiddenState(String studyInstanceUID, boolean hidden) throws SQLException {
+        if (sqliteConnection == null || studyInstanceUID == null) {
+            return;
+        }
+        
+        String updateSql = "UPDATE Study SET hidden = ? WHERE studyInstanceUID = ?";
+        try (PreparedStatement pstmt = sqliteConnection.prepareStatement(updateSql)) {
+            pstmt.setInt(1, hidden ? 1 : 0);
+            pstmt.setString(2, studyInstanceUID);
+            pstmt.executeUpdate();
+        }
+    }
+    
+    /**
+     * Studyのhidden状態を読み込む
+     * HOROS-20240407準拠: updatePreviewMatrixで使用
+     */
+    public void loadStudyHiddenState(DicomStudy study) throws SQLException {
+        if (sqliteConnection == null || study == null || study.getStudyInstanceUID() == null) {
+            return;
+        }
+        
+        // hiddenカラムが存在するか確認
+        boolean hasHiddenColumn = false;
+        try {
+            try (ResultSet rs = sqliteConnection.getMetaData().getColumns(null, null, "Study", "hidden")) {
+                hasHiddenColumn = rs.next();
+            }
+        } catch (SQLException e) {
+            // メタデータ取得に失敗した場合は、SELECTを試行してエラーで判断
+            hasHiddenColumn = false;
+        }
+        
+        if (!hasHiddenColumn) {
+            // hiddenカラムが存在しない場合は、デフォルト値（false）を設定
+            study.setHidden(false);
+            return;
+        }
+        
+        String selectSql = "SELECT hidden FROM Study WHERE studyInstanceUID = ?";
+        try (PreparedStatement pstmt = sqliteConnection.prepareStatement(selectSql)) {
+            pstmt.setString(1, study.getStudyInstanceUID());
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    int hiddenValue = rs.getInt("hidden");
+                    study.setHidden(hiddenValue != 0);
+                } else {
+                    // レコードが存在しない場合は、デフォルト値（false）を設定
+                    study.setHidden(false);
+                }
+            }
+        }
     }
     
     /**

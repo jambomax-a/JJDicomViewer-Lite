@@ -297,6 +297,7 @@ public class DCMView extends JPanel {
                 // HOROS-20240407準拠: DCMView.m 2550行目
                 // if( dcmPixList && index > -1 && [dcmPixList count] > 0)
                 if (this.dcmPixList != null && index > -1 && this.dcmPixList.size() > 0) {
+                    System.out.println("[DEBUG] DCMView.setIndex() - dcmPixList.size(): " + this.dcmPixList.size() + ", index: " + index);
                     // HOROS-20240407準拠: DCMView.m 2557-2559行目
                     // curImage = index;
                     // if( curImage >= [dcmPixList count]) curImage = (long)[dcmPixList count] -1;
