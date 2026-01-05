@@ -5731,6 +5731,11 @@ public class BrowserController extends JFrame {
                         // ビューワーウィンドウを表示
                         createdViewer.setVisible(true);
                         createdViewer.toFront();
+
+                        // HOROS-20240407準拠: ViewerController.m 3460行目 - windowDidBecomeMain:
+                        // ウィンドウがメインになったときの処理を呼び出す
+                        // サムネイルのハイライトと自動スクロールを実行
+                        createdViewer.windowDidBecomeMain();
                         
                         // HOROS-20240407準拠: ViewerController.m 3323-3324行目（windowDidDeminiaturize相当）
                         // ツールバーウィンドウを表示
